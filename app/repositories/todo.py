@@ -62,7 +62,7 @@ class TodoRepository:
         res = await self._collection.delete_one({"_id": ObjectId(item_id)})
         return res.deleted_count == 1
 
-    async def mark_completed(self, item_id: str) -> dict[str, Any] | None:
+    async def mark_complete(self, item_id: str) -> dict[str, Any] | None:
         return await self.update(item_id, {"completed": True})
     
     async def mark_incomplete(self, item_id: str) -> dict[str, Any] | None:

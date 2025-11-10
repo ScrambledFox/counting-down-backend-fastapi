@@ -62,7 +62,7 @@ class TodoService:
         item = await self._repo.get(item_id)
         if not item:
             return None
-        if item.get("completed", False):
+        if item.completed:
             return await self._repo.mark_incomplete(item_id)
         else:
-            return await self._repo.mark_completed(item_id)
+            return await self._repo.mark_complete(item_id)
