@@ -1,11 +1,11 @@
 from fastapi import Depends
 
-from app.db.deps import get_together_list_repo
-from app.repositories.together_list import TogetherListRepository
-from app.services.together_list import TogetherListService
+from app.db.deps import get_todo_repo
+from app.repositories.todos import TodoRepository
+from app.services.todos import TodoService
 
 
-async def get_together_list_service(
-    repo: TogetherListRepository = Depends(get_together_list_repo),
-) -> TogetherListService:
-    return TogetherListService(repo)
+async def get_todo_service(
+    repo: TodoRepository = Depends(get_todo_repo),
+) -> TodoService:
+    return TodoService(repo)

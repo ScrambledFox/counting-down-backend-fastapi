@@ -10,9 +10,9 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import settings
 from app.main import app
-from app.repositories.together_list import TogetherListRepository
-from app.services.deps import get_together_list_service
-from app.services.together_list import TogetherListService
+from app.repositories.todos import TodoRepository
+from app.services.deps import get_todo_service
+from app.services.todos import TodoService
 
 
 @pytest.fixture
@@ -26,15 +26,15 @@ def mock_db():
 
 @pytest.fixture
 def mock_repository(mock_db):
-    """Mock TogetherListRepository."""
-    repo = TogetherListRepository(mock_db)
+    """Mock TodoRepository."""
+    repo = TodoRepository(mock_db)
     return repo
 
 
 @pytest.fixture
 def mock_service(mock_repository):
-    """Mock TogetherListService."""
-    service = TogetherListService(mock_repository)
+    """Mock TodoService."""
+    service = TodoService(mock_repository)
     return service
 
 
@@ -42,10 +42,10 @@ def mock_service(mock_repository):
 def client(mock_service):
     """FastAPI test client with mocked service."""
     
-    def override_get_together_list_service():
+    def override_get_todo_service():
         return mock_service
     
-    app.dependency_overrides[get_together_list_service] = override_get_together_list_service
+    app.dependency_overrides[get_todo_service] = override_get_todo_service
     
     with TestClient(app) as client:
         yield client

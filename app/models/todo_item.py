@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class TogetherListItem(BaseModel):
+class TodoItem(BaseModel):
     id: str | None = Field(None, description="MongoDB document id as string")
     title: str
     category: str

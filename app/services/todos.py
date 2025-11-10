@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.repositories.together_list import TogetherListRepository
+from app.repositories.todos import TodoRepository
 
 
-class TogetherListService:
-    def __init__(self, repo: TogetherListRepository):
+class TodoService:
+    def __init__(self, repo: TodoRepository):
         self._repo = repo
 
     async def get_all_items(self) -> list[dict[str, Any]]:

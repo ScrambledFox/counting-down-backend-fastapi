@@ -8,9 +8,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
 
-COLLECTION_NAME = settings.together_list_collection_name
+COLLECTION_NAME = settings.todos_collection_name
 
-class TogetherListRepository:
+class TodoRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self._db = db
         self._collection = db[COLLECTION_NAME]

@@ -1,11 +1,11 @@
-"""Unit tests for together_list_items (todos) endpoints."""
+"""Unit tests for todo_items (todos) endpoints."""
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import status
 
 
-class TestGetTogetherListItems:
+class TestGetTodoItems:
     """Tests for GET /api/v1/todos/"""
 
     @pytest.mark.asyncio
@@ -33,7 +33,7 @@ class TestGetTogetherListItems:
         assert data[2]["title"] == "Third Todo"
 
 
-class TestCreateTogetherListItem:
+class TestCreateTodoItem:
     """Tests for POST /api/v1/todos/"""
 
     @pytest.mark.asyncio
@@ -123,7 +123,7 @@ class TestCreateTogetherListItem:
         assert "completed" in call_args
 
 
-class TestGetTogetherListItem:
+class TestGetTodoItem:
     """Tests for GET /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -158,7 +158,7 @@ class TestGetTogetherListItem:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-class TestUpdateTogetherListItem:
+class TestUpdateTodoItem:
     """Tests for PUT /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -238,7 +238,7 @@ class TestUpdateTogetherListItem:
         assert "Category cannot be empty" in response.json()["detail"]
 
 
-class TestDeleteTogetherListItem:
+class TestDeleteTodoItem:
     """Tests for DELETE /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -271,7 +271,7 @@ class TestDeleteTogetherListItem:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-class TestToggleTogetherListItemCompletion:
+class TestToggleTodoItemCompletion:
     """Tests for POST /api/v1/todos/{item_id}/toggle-completion"""
 
     @pytest.mark.asyncio

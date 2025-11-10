@@ -1,5 +1,5 @@
 """
-Integration tests for together_list_items (todos) endpoints.
+Integration tests for todos endpoints.
 
 These tests use a real MongoDB test database and test the full stack
 from HTTP request to database and back.
@@ -9,7 +9,7 @@ from fastapi import status
 
 
 @pytest.mark.asyncio
-class TestTogetherListIntegration:
+class TestTodosIntegration:
     """Integration tests for the complete todos API flow."""
 
     async def test_full_crud_workflow(self, integration_client):

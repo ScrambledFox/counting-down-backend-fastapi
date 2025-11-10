@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     mongo_url: str
     mongo_db_name: str
 
-    together_list_collection_name: str
+    todos_collection_name: str
 
     model_config = SettingsConfigDict(
         env_file=".env",
