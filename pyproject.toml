@@ -1,0 +1,61 @@
+[project]
+name = "counting-down-backend"
+version = "0.1.0"
+description = "A backend service for the counting down website for D and me."
+authors = [
+    { name = "Joris Lodewijks", email = "info@jorislodewijks.nl" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]",
+    "motor>=3.7.1",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "httpx>=0.27",
+  "anyio>=4.0",  
+  "pytest-asyncio>=0.23",
+]
+lint = [
+  "ruff>=0.6"
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes errors
+  "I",  # import-related rules
+  "UP", # pyupgrade rules
+  "B",  # flake-8 bugbear rules
+]
+ignore = [
+  "E203",  # whitespace before ':'
+  "B008",
+]
+exclude = ["*.pyi"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-q"
+pythonpath = ["."]
+testpaths = [
+    "tests",
+]
