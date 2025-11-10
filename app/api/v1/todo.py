@@ -1,22 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.services.deps import get_todo_service
-from app.services.todos import TodoService
-
-from .schemas import TodoItem, TodoItemCreate
+from app.schemas.todo import Todo, TodoCreate
+from app.services.dependencies import get_todo_service
+from app.services.todo import TodoService
 
 router = APIRouter(tags=["todos"], prefix="/todos")
 
 
-@router.get("/", summary="Get Todo Items", response_model=list[TodoItem])
+@router.get("/", summary="Get Todo Items", response_model=list[Todo])
 async def get_todo_items(
     service: TodoService = Depends(get_todo_service),
 ):
     return await service.get_all_items()
 
-@router.post("/", summary="Create Todo Item", response_model=TodoItem)
+
+@router.post("/", summary="Create Todo Item", response_model=Todo)
 async def create_todo_item(
-    item: TodoItemCreate,
+    item: TodoCreate,
     service: TodoService = Depends(get_todo_service),
 ):
     try:
@@ -24,7 +24,8 @@ async def create_todo_item(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 
-@router.get("/{item_id}", summary="Get Todo Item", response_model=TodoItem)
+
+@router.get("/{item_id}", summary="Get Todo Item", response_model=Todo)
 async def get_todo_item(
     item_id: str,
     service: TodoService = Depends(get_todo_service),
@@ -34,10 +35,11 @@ async def get_todo_item(
         raise HTTPException(status_code=404, detail="Item not found")
     return item
 
-@router.put("/{item_id}", summary="Update Todo Item", response_model=TodoItem)
+
+@router.put("/{item_id}", summary="Update Todo Item", response_model=Todo)
 async def update_todo_item(
     item_id: str,
-    item: TodoItemCreate,
+    item: TodoCreate,
     service: TodoService = Depends(get_todo_service),
 ):
     try:
@@ -47,6 +49,7 @@ async def update_todo_item(
         return updated_item
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
+
 
 @router.delete(
     "/{item_id}",
@@ -61,10 +64,11 @@ async def delete_todo_item(
         raise HTTPException(status_code=404, detail="Item not found")
     return {"detail": "Item deleted"}
 
-@router.post( 
+
+@router.post(
     "/{item_id}/toggle-completion",
     summary="Toggle Todo Item Completion",
-    response_model=TodoItem,
+    response_model=Todo,
 )
 async def toggle_todo_item_completion(
     item_id: str,

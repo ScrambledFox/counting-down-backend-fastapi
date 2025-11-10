@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 
-from . import todos
+from . import todo
 
 router = APIRouter()
-router.include_router(todos.router)
+router.include_router(todo.router)
 
 
 @router.get("/hello", tags=["demo"])

@@ -7,6 +7,7 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
+from app.models.todo import Todo
 
 COLLECTION_NAME = settings.todos_collection_name
 
@@ -26,11 +27,11 @@ class TodoRepository:
         cursor = self._collection.find({}, sort=[("created_at", 1)])
         return [self._serialize(d) async for d in cursor]
 
-    async def get(self, item_id: str) -> dict[str, Any] | None:
+    async def get(self, item_id: str) -> Todo | None:
         if not ObjectId.is_valid(item_id):
             return None
         doc = await self._collection.find_one({"_id": ObjectId(item_id)})
-        return self._serialize(doc) if doc else None
+        return Todo(**self._serialize(doc)) if doc else None
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         now = datetime.datetime.now(datetime.UTC)

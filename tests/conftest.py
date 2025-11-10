@@ -11,8 +11,8 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.core.config import settings
 from app.main import app
 from app.repositories.todos import TodoRepository
-from app.services.deps import get_todo_service
-from app.services.todos import TodoService
+from app.services.dependencies import get_todo_service
+from app.services.todo import TodoService
 
 
 @pytest.fixture
@@ -130,7 +130,7 @@ async def integration_client(
     AsyncClient for integration tests with test database.
     Overrides the database dependency to use test database.
     """
-    from app.db.deps import get_db
+    from app.db.dependencies import get_db
     
     async def override_get_db():
         yield test_db

@@ -5,7 +5,7 @@ import pytest
 from fastapi import status
 
 
-class TestGetTodoItems:
+class TestGetTodos:
     """Tests for GET /api/v1/todos/"""
 
     @pytest.mark.asyncio
@@ -33,7 +33,7 @@ class TestGetTodoItems:
         assert data[2]["title"] == "Third Todo"
 
 
-class TestCreateTodoItem:
+class TestCreateTodo:
     """Tests for POST /api/v1/todos/"""
 
     @pytest.mark.asyncio
@@ -123,7 +123,7 @@ class TestCreateTodoItem:
         assert "completed" in call_args
 
 
-class TestGetTodoItem:
+class TestGetTodo:
     """Tests for GET /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -158,7 +158,7 @@ class TestGetTodoItem:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-class TestUpdateTodoItem:
+class TestUpdateTodo:
     """Tests for PUT /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -238,7 +238,7 @@ class TestUpdateTodoItem:
         assert "Category cannot be empty" in response.json()["detail"]
 
 
-class TestDeleteTodoItem:
+class TestDeleteTodo:
     """Tests for DELETE /api/v1/todos/{item_id}"""
 
     @pytest.mark.asyncio
@@ -271,7 +271,7 @@ class TestDeleteTodoItem:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-class TestToggleTodoItemCompletion:
+class TestToggleTodoCompletion:
     """Tests for POST /api/v1/todos/{item_id}/toggle-completion"""
 
     @pytest.mark.asyncio
