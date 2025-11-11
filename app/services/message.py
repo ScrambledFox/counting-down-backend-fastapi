@@ -10,14 +10,14 @@ class MessageService:
         self._repo = repo
 
     async def get_all_messages(self) -> list[Message]:
-        return await self._repo.list()
+        return await self._repo.list_not_deleted()
     
     async def get_message_by_id(self, message_id: str) -> Message | None:
         return await self._repo.get(message_id)
 
     async def create_message(self, message: MessageCreate) -> Message:
         new_message: Message = Message(
-            sender=message.sender.strip(),
+            sender=message.sender.strip() if message.sender else "Anonymous",
             message=message.message.strip(),
             created_at=utc_now(),
         )

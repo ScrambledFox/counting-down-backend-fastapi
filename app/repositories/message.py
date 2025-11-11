@@ -21,8 +21,13 @@ class MessageRepository:
         raw_doc = from_mongo(doc)
         return TypeAdapter(Message).validate_python(raw_doc)
     
-    async def list(self) -> list[Message]:
+    async def list_all(self) -> list[Message]:
         cursor = self._collection.find()
+        docs = await cursor.to_list(length=None)
+        return [self._to_message(doc) for doc in docs]
+    
+    async def list_not_deleted(self) -> list[Message]:
+        cursor = self._collection.find({"deleted_at": None})
         docs = await cursor.to_list(length=None)
         return [self._to_message(doc) for doc in docs]
     
