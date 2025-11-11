@@ -6,6 +6,12 @@ __pycache__/
 # Testing
 .pytest_cache/
 
+# MyPy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
 # Environment variables
 .env
 .env.*

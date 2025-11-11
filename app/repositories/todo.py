@@ -1,69 +1,49 @@
-from __future__ import annotations
-
-import datetime
+from collections.abc import Mapping
 from typing import Any
 
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from fastapi import Depends
 
 from app.core.config import settings
-from app.models.todo import Todo
+from app.db.client import AsyncDB, get_db
+from app.models.todo import TodoModel
 
-COLLECTION_NAME = settings.todos_collection_name
 
 class TodoRepository:
-    def __init__(self, db: AsyncIOMotorDatabase):
-        self._db = db
-        self._collection = db[COLLECTION_NAME]
+    def __init__(self, db: AsyncDB = Depends(get_db)):
+        self._collection = db[settings.todos_collection_name]
 
     @staticmethod
     def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
-        if not doc:
-            return {}
-        doc["id"] = str(doc["_id"])
-        return doc
+        return {**doc, "id": str(doc["_id"])} if doc else {}
 
     async def list(self) -> list[dict[str, Any]]:
-        cursor = self._collection.find({}, sort=[("created_at", 1)])
-        return [self._serialize(d) async for d in cursor]
+        cursor = self._collection.find()
+        docs = await cursor.to_list(length=None)
+        return [self._serialize(doc) for doc in docs]
 
-    async def get(self, item_id: str) -> Todo | None:
-        if not ObjectId.is_valid(item_id):
-            return None
-        doc = await self._collection.find_one({"_id": ObjectId(item_id)})
-        return Todo(**self._serialize(doc)) if doc else None
+    async def get(self, todo_id: str) -> dict[str, Any] | None:
+        doc = await self._collection.find_one({"_id": ObjectId(todo_id)})
+        return self._serialize(doc) if doc else None
 
-    async def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        now = datetime.datetime.now(datetime.UTC)
-        payload = {
-            **data,
-            "completed": data.get("completed", False),
-            "created_at": now,
-            "updated_at": now,
-        }
-        result = await self._collection.insert_one(payload)
-        payload["_id"] = result.inserted_id
-        return self._serialize(payload)
+    async def create(self, payload: TodoModel) -> str:
+        doc = await self._collection.insert_one(dict(payload))
+        return str(doc.inserted_id)
 
-    async def update(self, item_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
-        if not ObjectId.is_valid(item_id):
-            return None
-        data["updated_at"] = datetime.datetime.now(datetime.UTC)
-        result = await self._collection.find_one_and_update(
-            {"_id": ObjectId(item_id)},
-            {"$set": data},
+    async def update(self, todo_id: str, data: Mapping[str, Any]) -> dict[str, Any] | None:
+        result = await self._collection.update_one({"_id": ObjectId(todo_id)}, {"$set": data})
+        if result.modified_count > 0:
+            return await self.get(todo_id)
+        return None
+
+    async def delete(self, todo_id: str) -> bool:
+        result = await self._collection.delete_one({"_id": ObjectId(todo_id)})
+        return result.deleted_count > 0
+
+    async def toggle(self, todo_id: str) -> dict[str, Any] | None:
+        updated_doc = await self._collection.find_one_and_update(
+            {"_id": ObjectId(todo_id)},
+            [{"$set": {"completed": {"$not": "$completed"}}}],
             return_document=True,
         )
-        return self._serialize(result) if result else None
-
-    async def delete(self, item_id: str) -> bool:
-        if not ObjectId.is_valid(item_id):
-            return False
-        res = await self._collection.delete_one({"_id": ObjectId(item_id)})
-        return res.deleted_count == 1
-
-    async def mark_complete(self, item_id: str) -> dict[str, Any] | None:
-        return await self.update(item_id, {"completed": True})
-    
-    async def mark_incomplete(self, item_id: str) -> dict[str, Any] | None:
-        return await self.update(item_id, {"completed": False})
+        return self._serialize(updated_doc) if updated_doc else None

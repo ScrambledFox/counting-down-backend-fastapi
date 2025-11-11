@@ -1,68 +1,55 @@
 from __future__ import annotations
 
-from app.repositories.todos import TodoRepository
-from app.schemas.todo import Todo
+from typing import Any
+
+from pydantic import TypeAdapter
+
+from app.core.time import utc_now
+from app.models.todo import TodoModel
+from app.repositories.todo import TodoRepository
+from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 
 
 class TodoService:
     def __init__(self, repo: TodoRepository):
         self._repo = repo
+        self._todos_adapter = TypeAdapter(list[Todo])
+        self._todo_adapter = TypeAdapter(Todo)
 
-    async def get_all_items(self) -> list[Todo]:
-        return await self._repo.list()
+    def _to_todo(self, doc: dict[str, Any]) -> Todo:
+        return self._todo_adapter.validate_python(doc)
 
-    async def get_item_by_id(self, item_id: str) -> Todo | None:
-        return await self._repo.get(item_id)
+    async def get_all(self) -> list[Todo]:
+        docs = await self._repo.list()
+        return [self._to_todo(doc) for doc in docs]
 
-    async def create_item(self, data: Todo) -> Todo:
-        title = data.get("title", "").strip()
-        if not title:
-            raise ValueError("Title cannot be empty")
+    async def get_by_id(self, item_id: str) -> Todo | None:
+        doc = await self._repo.get(item_id)
+        if doc:
+            return self._to_todo(doc)
+        return None
 
-        category = data.get("category", "").strip()
-        if not category:
-            raise ValueError("Category cannot be empty")
+    async def create(self, data: TodoCreate) -> Todo:
+        todo = TodoModel.from_dict(data)
+        new_id = await self._repo.create(todo)
+        return self._to_todo({**todo.model_dump(), "id": new_id})
 
-        cleaned_data = {
-            "title": title,
-            "category": category,
-            "completed": data.get("completed", False),
-        }
+    async def update(self, item_id: str, data: TodoUpdate) -> Todo | None:
+        update_data = data.model_dump(exclude_unset=True)
+        for key in ("title", "category"):
+            if key in update_data and isinstance(update_data[key], str):
+                update_data[key] = update_data[key].strip()
+        update_data["updated_at"] = utc_now()
+        updated_doc = await self._repo.update(item_id, update_data)
+        if updated_doc:
+            return self._to_todo(updated_doc)
+        return None
 
-        return await self._repo.create(cleaned_data)
-
-    async def update_item(self, item_id: str, data: Todo) -> Todo | None:
-        existing_item = await self._repo.get(item_id)
-        if not existing_item:
-            return None
-
-        update_data = {}
-
-        if "title" in data:
-            title = data["title"].strip()
-            if not title:
-                raise ValueError("Title cannot be empty")
-            update_data["title"] = title
-
-        if "category" in data:
-            category = data["category"].strip()
-            if not category:
-                raise ValueError("Category cannot be empty")
-            update_data["category"] = category
-
-        if "completed" in data:
-            update_data["completed"] = data["completed"]
-
-        return await self._repo.update(item_id, update_data)
-
-    async def delete_item(self, item_id: str) -> bool:
+    async def delete(self, item_id: str) -> bool:
         return await self._repo.delete(item_id)
 
-    async def toggle_item_completion(self, item_id: str) -> Todo | None:
-        item = await self._repo.get(item_id)
-        if not item:
-            return None
-        if item.completed:
-            return await self._repo.mark_incomplete(item_id)
-        else:
-            return await self._repo.mark_complete(item_id)
+    async def toggle_completion(self, item_id: str) -> Todo | None:
+        item = await self._repo.toggle(item_id)
+        if item:
+            return self._to_todo(item)
+        return None
