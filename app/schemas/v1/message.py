@@ -11,5 +11,5 @@ class Message(BaseModel):
     deleted_at: dt | None = None
 
 class MessageCreate(BaseModel):
-    sender: str
+    sender: str | None = None
     message: str
