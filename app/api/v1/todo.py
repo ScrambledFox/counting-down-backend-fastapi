@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
+from app.core.exceptions import TodoBadRequestException, TodoNotFoundException
 from app.dependencies import get_todo_service
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
@@ -18,7 +19,7 @@ async def get_todo_items(
 async def get_todo_item(item_id: str, service: TodoService = Depends(get_todo_service)) -> Todo:
     item = await service.get_by_id(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise TodoNotFoundException(item_id)
     return item
 
 
@@ -31,7 +32,7 @@ async def create_todo_item(
     try:
         return await service.create(item)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        raise TodoBadRequestException(detail=str(e)) from None
 
 
 @router.put("/{item_id}", summary="Update Todo Item", response_model=Todo)
@@ -41,10 +42,10 @@ async def update_todo_item(
     try:
         updated_item = await service.update(item_id, item)
         if not updated_item:
-            raise HTTPException(status_code=404, detail="Item not found")
+            raise TodoNotFoundException(item_id)
         return updated_item
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
+        raise TodoBadRequestException(detail=str(e)) from None
 
 
 @router.delete("/{item_id}", summary="Delete Todo Item")
@@ -53,7 +54,7 @@ async def delete_todo_item(
 ) -> dict[str, str]:
     success = await service.delete(item_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise TodoNotFoundException(item_id)
     return {"detail": "Item deleted"}
 
 
@@ -67,5 +68,5 @@ async def toggle_todo_item_completion(
 ) -> Todo:
     updated_item = await service.toggle_completion(item_id)
     if not updated_item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise TodoNotFoundException(item_id)
     return updated_item
