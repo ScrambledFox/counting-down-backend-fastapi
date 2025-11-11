@@ -34,6 +34,11 @@ jobs:
           python -m pip install --upgrade pip uv
           uv pip install --system -r pyproject.toml
 
+      - name: Set up environment variables
+        run: |
+          echo "MONGO_URL=${{ secrets.MONGO_URL }}" >> .env
+          echo 'MONGO_APP_NAME="test"' >> .env
+
       - name: Run tests
         run: |
           pytest -v --maxfail=1 --disable-warnings
