@@ -1,12 +1,13 @@
 import asyncio
-from typing import Any, Final
+from typing import Final
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import settings
+from app.models.db import Document
 
-type AsyncDB = AsyncIOMotorDatabase[dict[str, Any]]
-type AsyncClient = AsyncIOMotorClient[dict[str, Any]]
+type AsyncDB = AsyncIOMotorDatabase[Document]
+type AsyncClient = AsyncIOMotorClient[Document]
 
 
 _client: AsyncClient | None = None
@@ -22,13 +23,16 @@ async def get_db_client() -> AsyncClient:
         if _client is not None:
             return _client
 
-        client = AsyncIOMotorClient[dict[str, Any]](
+        client = AsyncIOMotorClient[Document](
             settings.mongo_url,
             serverSelectionTimeoutMS=5_000,
             uuidRepresentation="standard",
         )
 
-        await client.admin.command("ping")
+        try:
+            await client.admin.command("ping")
+        except Exception as e:
+            raise ConnectionError("Could not connect to MongoDB") from e
 
         _client = client
         return _client

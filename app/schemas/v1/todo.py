@@ -4,7 +4,7 @@ from pydantic import BaseModel, field_validator
 
 
 class Todo(BaseModel):
-    id: str
+    id: str | None = None
     title: str
     category: str
     completed: bool

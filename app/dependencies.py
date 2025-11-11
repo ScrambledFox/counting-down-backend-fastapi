@@ -1,3 +1,6 @@
+from collections.abc import Awaitable, Callable
+from typing import cast
+
 from fastapi import Depends
 
 from app.db.client import AsyncDB, get_db
@@ -8,9 +11,8 @@ from app.services.todo import TodoService
 async def get_db_dep() -> AsyncDB:
     return await get_db()
 
-
 def get_todo_repository(
-    db: AsyncDB = Depends(get_db_dep),
+    db: AsyncDB = Depends(cast(Callable[[], Awaitable[AsyncDB]], get_db_dep)),
 ) -> TodoRepository:
     return TodoRepository(db)
 
