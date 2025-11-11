@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.v1.todo import create_todo_item, get_todo_item
-from app.core.exceptions import TodoNotFoundException
+from app.core.exceptions import NotFoundException
 from app.schemas.v1.todo import Todo, TodoCreate
 from app.services.todo import TodoService
 
@@ -42,7 +42,7 @@ class TestTodoRoutes_Get:
 
     @pytest.mark.asyncio
     async def test_get_todo_item_not_found(self):
-        """Test retrieving a non-existent todo item raises TodoNotFoundException."""
+        """Test retrieving a non-existent todo item raises NotFoundException."""
         # Arrange
         item_id = "nonexistent_id"
 
@@ -50,7 +50,7 @@ class TestTodoRoutes_Get:
         mock_service.get_by_id = AsyncMock(return_value=None)
 
         # Act & Assert
-        with pytest.raises(TodoNotFoundException) as exc_info:
+        with pytest.raises(NotFoundException) as exc_info:
             await get_todo_item(item_id=item_id, service=mock_service)
 
         assert item_id in str(exc_info.value)

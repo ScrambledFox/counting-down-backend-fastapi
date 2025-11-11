@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     mongo_app_name: str = "counting_down_app"
 
     todos_collection_name: str = "todos"
+    messages_collection_name: str = "messages"
+    flights_collection_name: str = "flights"
 
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True)
 

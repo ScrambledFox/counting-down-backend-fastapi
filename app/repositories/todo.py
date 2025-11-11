@@ -9,30 +9,17 @@ from app.core.config import settings
 from app.db.client import AsyncDB, get_db
 from app.models.db import Document
 from app.schemas.v1.todo import Todo
+from app.util.mongo import from_mongo
 
 
 class TodoRepository:
     def __init__(self, db: AsyncDB = Depends(get_db)):
         self._collection = db[settings.todos_collection_name]
 
-    @staticmethod
-    def _serialize(doc: Document) -> Document:
-        if not doc:
-            return {}
-        result = dict(doc)
-        result["id"] = str(result["_id"])
-        return result
-
     @classmethod
     def _to_todo(cls, doc: Document) -> Todo:
-        raw_doc = cls._serialize(doc)
+        raw_doc = from_mongo(doc)
         return TypeAdapter(Todo).validate_python(raw_doc)
-    
-    @staticmethod
-    def _from_todo(todo: Todo) -> Document:
-        data = dict(todo)
-        data.pop("id", None)  # Remove 'id' if present, as MongoDB uses '_id'
-        return data
 
     async def list(self) -> list[Todo]:
         cursor = self._collection.find()
