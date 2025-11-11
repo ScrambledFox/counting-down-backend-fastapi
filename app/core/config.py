@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "dev"
 
+    frontend_url: str | None = None
+
     mongo_url: str = "mongodb://localhost:27017"
     mongo_app_name: str = "counting_down_app"
 
