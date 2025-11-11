@@ -12,10 +12,10 @@ from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import settings
+from app.dependencies import get_db, get_todo_service
 from app.main import app
 from app.repositories.todo import TodoRepository
-from app.schemas.todo import Todo, TodoCreate
-from app.services.dependencies import get_todo_service
+from app.schemas.v1.todo import Todo, TodoCreate
 from app.services.todo import TodoService
 
 FIXED_TIME = datetime(2025, 11, 10, 10, 0, 0)
@@ -67,8 +67,8 @@ def sample_todo_item() -> Todo:
         title="Test Todo",
         category="personal",
         completed=False,
-        createdAt=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
-        updatedAt=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
+        created_at=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
+        updated_at=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
     )
 
 
@@ -81,24 +81,24 @@ def sample_todo_items() -> list[Todo]:
             title="First Todo",
             category="personal",
             completed=False,
-            createdAt=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
-            updatedAt=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
+            created_at=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
+            updated_at=datetime.fromisoformat("2025-11-10T10:00:00+00:00"),
         ),
         Todo(
             id="507f1f77bcf86cd799439012",
             title="Second Todo",
             category="work",
             completed=True,
-            createdAt=datetime.fromisoformat("2025-11-10T11:00:00+00:00"),
-            updatedAt=datetime.fromisoformat("2025-11-10T11:00:00+00:00"),
+            created_at=datetime.fromisoformat("2025-11-10T11:00:00+00:00"),
+            updated_at=datetime.fromisoformat("2025-11-10T11:00:00+00:00"),
         ),
         Todo(
             id="507f1f77bcf86cd799439013",
             title="Third Todo",
             category="shopping",
             completed=False,
-            createdAt=datetime.fromisoformat("2025-11-10T12:00:00+00:00"),
-            updatedAt=datetime.fromisoformat("2025-11-10T12:00:00+00:00"),
+            created_at=datetime.fromisoformat("2025-11-10T12:00:00+00:00"),
+            updated_at=datetime.fromisoformat("2025-11-10T12:00:00+00:00"),
         ),
     ]
 
@@ -136,8 +136,6 @@ async def integration_client(
     AsyncClient for integration tests with test database.
     Overrides the database dependency to use test database.
     """
-    from app.db.dependencies import get_db
-
     async def override_get_db():
         yield test_db
 
