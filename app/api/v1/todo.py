@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, status
 
 from app.core.exceptions import BadRequestException, NotFoundException
-from app.dependencies import get_todo_service
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
+from app.services.dependencies import get_todo_service
 from app.services.todo import TodoService
 
 router = APIRouter(tags=["todos"], prefix="/todos")

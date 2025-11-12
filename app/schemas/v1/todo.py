@@ -2,8 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas.v1.base import CustomModel
 
-class Todo(BaseModel):
+
+class Todo(CustomModel):
     id: str | None = None
     title: str
     category: str
@@ -12,7 +14,7 @@ class Todo(BaseModel):
     updated_at: datetime | None = None
 
 
-class TodoUpdate(BaseModel):
+class TodoUpdate(CustomModel):
     title: str | None = None
     category: str | None = None
     completed: bool | None = None

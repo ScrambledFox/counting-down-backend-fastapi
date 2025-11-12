@@ -10,10 +10,10 @@ class TodoService:
         self._repo = repo
 
     async def get_all(self) -> list[Todo]:
-        return await self._repo.list()
+        return await self._repo.list_todos()
 
     async def get_by_id(self, item_id: str) -> Todo | None:
-        return await self._repo.get(item_id)
+        return await self._repo.get_todo(item_id)
 
     async def create(self, data: TodoCreate) -> Todo:
         now = utc_now()
@@ -25,9 +25,9 @@ class TodoService:
             updated_at=None,
         )
 
-        created_id = await self._repo.create(new_todo)
+        created_id = await self._repo.create_todo(new_todo)
 
-        created = await self._repo.get(created_id)
+        created = await self._repo.get_todo(created_id)
         if created is None:
             raise RuntimeError(f"Failed to fetch newly created todo with id {created_id}")
         return created
@@ -38,10 +38,10 @@ class TodoService:
             if key in update_data and isinstance(update_data[key], str):
                 update_data[key] = update_data[key].strip()
         update_data["updated_at"] = utc_now()
-        return await self._repo.update(item_id, update_data)
+        return await self._repo.update_todo(item_id, update_data)
 
     async def delete(self, item_id: str) -> bool:
-        return await self._repo.delete(item_id)
+        return await self._repo.delete_todo(item_id)
 
     async def toggle_completion(self, item_id: str) -> Todo | None:
-        return await self._repo.toggle(item_id)
+        return await self._repo.toggle_todo(item_id)
