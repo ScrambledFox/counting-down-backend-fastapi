@@ -10,6 +10,7 @@ class Message(BaseModel):
     created_at: dt
     deleted_at: dt | None = None
 
+
 class MessageCreate(BaseModel):
     sender: str | None = None
     message: str

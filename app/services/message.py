@@ -1,5 +1,3 @@
-
-
 from app.core.time import utc_now
 from app.repositories.message import MessageRepository
 from app.schemas.v1.message import Message, MessageCreate
@@ -11,7 +9,7 @@ class MessageService:
 
     async def get_all_messages(self) -> list[Message]:
         return await self._repo.list_not_deleted()
-    
+
     async def get_message_by_id(self, message_id: str) -> Message | None:
         return await self._repo.get(message_id)
 

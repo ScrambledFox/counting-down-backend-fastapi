@@ -37,6 +37,7 @@ async def test_db() -> AsyncGenerator[AsyncDB]:
     # Clean up after test
     await collection.delete_many({})
 
+
 @pytest_asyncio.fixture
 async def todo_repository_real(test_db: AsyncDB):
     """Real repository for integration tests."""
@@ -71,6 +72,7 @@ def sample_todos() -> list[Todo]:
         ),
     ]
 
+
 @pytest.fixture
 def sample_todo() -> Todo:
     return Todo(
@@ -82,6 +84,7 @@ def sample_todo() -> Todo:
         updated_at=None,
     )
 
+
 @pytest.fixture
 def sample_todo_create() -> TodoCreate:
     return TodoCreate(
@@ -89,6 +92,7 @@ def sample_todo_create() -> TodoCreate:
         category="General",
         completed=False,
     )
+
 
 @pytest.fixture
 def sample_todo_update() -> TodoUpdate:

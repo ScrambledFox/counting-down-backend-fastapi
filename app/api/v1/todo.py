@@ -24,7 +24,10 @@ async def get_todo_item(item_id: str, service: TodoService = Depends(get_todo_se
 
 
 @router.post(
-    "/", summary="Create Todo Item", response_model=Todo, status_code=status.HTTP_201_CREATED
+    "/",
+    summary="Create Todo Item",
+    response_model=Todo,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_todo_item(
     item: TodoCreate, service: TodoService = Depends(get_todo_service)

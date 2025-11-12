@@ -13,13 +13,16 @@ from app.services.todo import TodoService
 async def get_db_dep() -> AsyncDB:
     return await get_db()
 
+
 def get_todo_repository(
     db: AsyncDB = Depends(cast(Callable[[], Awaitable[AsyncDB]], get_db_dep)),
 ) -> TodoRepository:
     return TodoRepository(db)
 
 
-def get_todo_service(repo: TodoRepository = Depends(get_todo_repository)) -> TodoService:
+def get_todo_service(
+    repo: TodoRepository = Depends(get_todo_repository),
+) -> TodoService:
     return TodoService(repo)
 
 
@@ -27,6 +30,7 @@ def get_message_repository(
     db: AsyncDB = Depends(cast(Callable[[], Awaitable[AsyncDB]], get_db_dep)),
 ) -> MessageRepository:
     return MessageRepository(db)
+
 
 def get_message_service(
     repo: MessageRepository = Depends(get_message_repository),

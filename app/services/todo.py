@@ -31,7 +31,7 @@ class TodoService:
         if created is None:
             raise RuntimeError(f"Failed to fetch newly created todo with id {created_id}")
         return created
-    
+
     async def update(self, item_id: str, data: TodoUpdate) -> Todo | None:
         update_data = data.model_dump(exclude_unset=True)
         for key in ("title", "category"):

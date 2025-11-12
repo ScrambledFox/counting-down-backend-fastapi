@@ -243,7 +243,10 @@ class TestTodoRepository:
 
     @pytest.mark.asyncio
     async def test_get_todos_list(
-        self, todo_service_mock: TodoService, todo_repository_mock: Mock, sample_todos: list[Todo]
+        self,
+        todo_service_mock: TodoService,
+        todo_repository_mock: Mock,
+        sample_todos: list[Todo],
     ):
         todo_repository_mock.list.return_value = sample_todos
 
@@ -264,7 +267,10 @@ class TestTodoRepository:
 
     @pytest.mark.asyncio
     async def test_get_todo_by_id(
-        self, todo_service_mock: TodoService, todo_repository_mock: Mock, sample_todos: list[Todo]
+        self,
+        todo_service_mock: TodoService,
+        todo_repository_mock: Mock,
+        sample_todos: list[Todo],
     ):
         todo_repository_mock.get.return_value = sample_todos[0]
 

@@ -19,9 +19,7 @@ class TestTodoRepository_Integration:
             return dt.replace(tzinfo=UTC)
         return dt
 
-    def _assert_todo_equal(
-        self, todo1: Todo, todo2: Todo, tolerance_seconds: float = 1.0
-    ):
+    def _assert_todo_equal(self, todo1: Todo, todo2: Todo, tolerance_seconds: float = 1.0):
         assert todo1.id == todo2.id
         assert todo1.title == todo2.title
         assert todo1.category == todo2.category
@@ -34,8 +32,7 @@ class TestTodoRepository_Integration:
             assert dt1 is not None and dt2 is not None
             time_diff = abs((dt1 - dt2).total_seconds())
             assert time_diff <= tolerance_seconds, (
-                f"created_at differs by {time_diff}s "
-                f"(tolerance: {tolerance_seconds}s)"
+                f"created_at differs by {time_diff}s (tolerance: {tolerance_seconds}s)"
             )
         else:
             assert todo1.created_at == todo2.created_at
@@ -46,8 +43,7 @@ class TestTodoRepository_Integration:
             assert dt1 is not None and dt2 is not None
             time_diff = abs((dt1 - dt2).total_seconds())
             assert time_diff <= tolerance_seconds, (
-                f"updated_at differs by {time_diff}s "
-                f"(tolerance: {tolerance_seconds}s)"
+                f"updated_at differs by {time_diff}s (tolerance: {tolerance_seconds}s)"
             )
         else:
             assert todo1.updated_at == todo2.updated_at
