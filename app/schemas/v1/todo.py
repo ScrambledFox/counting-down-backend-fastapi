@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 
 from app.schemas.v1.base import CustomModel, MongoId
 
@@ -29,7 +29,7 @@ class TodoUpdate(CustomModel):
         return v
 
 
-class TodoCreate(BaseModel):
+class TodoCreate(CustomModel):
     title: str
     category: str
     completed: bool = False

@@ -22,8 +22,10 @@ class TodoRepository:
         doc = await self._collection.find_one({"_id": ObjectId(todo_id)})
         return Todo.model_validate(doc) if doc else None
 
-    async def create_todo(self, payload: Todo) -> Todo:
-        result = await self._collection.insert_one(dict(payload))
+    async def create_todo(self, todo: Todo) -> Todo:
+        result = await self._collection.insert_one(
+            todo.model_dump(by_alias=True)
+        )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Todo.model_validate(doc)
 
