@@ -26,7 +26,6 @@ class TodoService:
             category=data.category.strip(),
             completed=data.completed,
             created_at=now,
-            updated_at=None,
         )
         return await self._repo.create_todo(new_todo)
 

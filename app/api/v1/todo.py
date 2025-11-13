@@ -32,10 +32,7 @@ async def get_todo_item(item_id: str, service: TodoServiceDep) -> Todo:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_todo_item(item: TodoCreate, service: TodoServiceDep) -> Todo:
-    try:
-        return await service.create(item)
-    except ValueError as e:
-        raise BadRequestException(detail=str(e)) from None
+    return await service.create(item)
 
 
 @router.put("/{item_id}", summary="Update Todo Item", response_model=Todo)

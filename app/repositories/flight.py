@@ -33,7 +33,7 @@ class FlightRepository:
 
     async def create_flight(self, flight: Flight) -> Flight:
         result = await self._collection.insert_one(
-            flight.model_dump(by_alias=True, exclude_none=True)
+            flight.model_dump(by_alias=True)
         )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Flight.model_validate(doc)
