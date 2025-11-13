@@ -29,7 +29,7 @@ class MessageRepository:
 
     async def create(self, message: Message) -> Message:
         result = await self._collection.insert_one(
-            message.model_dump(by_alias=True)
+            message.model_dump(by_alias=True, exclude_none=True)
         )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Message.model_validate(doc)
