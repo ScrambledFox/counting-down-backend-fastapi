@@ -55,7 +55,7 @@ async def todo_service_real(todo_repository_real: TodoRepository):
 def sample_todos() -> list[Todo]:
     return [
         Todo(
-            id="64a7f0c2f1d2c4b5a6e7d8f1",
+            _id="64a7f0c2f1d2c4b5a6e7d8f1",
             title="Test Todo 1",
             category="Testing",
             completed=False,
@@ -63,7 +63,7 @@ def sample_todos() -> list[Todo]:
             updated_at=None,
         ),
         Todo(
-            id="64a7f0c2f1d2c4b5a6e7d8f2",
+            _id="64a7f0c2f1d2c4b5a6e7d8f2",
             title="Test Todo 2",
             category="Testing",
             completed=True,
@@ -76,7 +76,7 @@ def sample_todos() -> list[Todo]:
 @pytest.fixture
 def sample_todo() -> Todo:
     return Todo(
-        id="64a7f0c2f1d2c4b5a6e7d8f1",
+        _id="64a7f0c2f1d2c4b5a6e7d8f1",
         title="Sample Todo",
         category="General",
         completed=False,

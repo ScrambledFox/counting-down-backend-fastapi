@@ -2,7 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.response import DeletedResponse
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
 
@@ -48,12 +49,12 @@ async def update_todo_item(item_id: str, item: TodoUpdate, service: TodoServiceD
         raise BadRequestException(detail=str(e)) from None
 
 
-@router.delete("/{item_id}", summary="Delete Todo Item", response_model=dict[str, str])
-async def delete_todo_item(item_id: str, service: TodoServiceDep) -> dict[str, str]:
+@router.delete("/{item_id}", summary="Delete Todo Item")
+async def delete_todo_item(item_id: str, service: TodoServiceDep):
     success = await service.delete(item_id)
     if not success:
         raise NotFoundException("Todo", item_id)
-    return {"detail": "Item deleted"}
+    return DeletedResponse()
 
 
 @router.post(

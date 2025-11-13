@@ -2,8 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.message import Message, MessageCreate
+from app.schemas.v1.response import DeletedResponse
 from app.services.message import MessageService
 
 router = APIRouter(tags=["messages"], prefix="/messages")
@@ -33,9 +34,9 @@ async def create_message_item(message: MessageCreate, service: MessageServiceDep
         raise BadRequestException(detail=str(e)) from None
 
 
-@router.delete("/{message_id}", summary="Delete Message Item", response_model=dict[str, str])
-async def delete_message_item(message_id: str, service: MessageServiceDep) -> dict[str, str]:
+@router.delete("/{message_id}", summary="Delete Message Item")
+async def delete_message_item(message_id: str, service: MessageServiceDep):
     success = await service.delete_message(message_id)
     if not success:
         raise NotFoundException("Message", message_id)
-    return {"detail": "Item deleted"}
+    return DeletedResponse()

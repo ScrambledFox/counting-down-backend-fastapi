@@ -5,6 +5,8 @@ from pydantic import Field
 
 from app.schemas.v1.base import CustomModel, MongoId
 
+type FlightNumber = str
+
 
 class FlightStatus(str, Enum):
     DRAFT = "DRAFT"
@@ -13,7 +15,7 @@ class FlightStatus(str, Enum):
 
 
 class FlightBase(CustomModel):
-    flight_number: str
+    flight_number: FlightNumber
     departure_airport_icao: str
     arrival_airport_icao: str
     departure_at: datetime

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.v1.todo import create_todo_item, get_todo_item
-from app.core.exceptions import NotFoundException
+from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.todo import Todo, TodoCreate
 from app.services.todo import TodoService
 
