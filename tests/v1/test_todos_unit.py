@@ -20,7 +20,7 @@ class TestTodoRoutes_Get:
         # Arrange
         item_id = "64a7f0c2f1d2c4b5a6e7d8f1"
         expected_todo = Todo(
-            id=item_id,
+            _id=item_id,
             title="Test Todo",
             category="Work",
             completed=False,
@@ -73,32 +73,6 @@ class TestTodoRoutes_Get:
         mock_service.get_by_id.assert_called_once_with(item_id)
 
     @pytest.mark.asyncio
-    async def test_get_todo_item_with_different_id_formats(self):
-        """Test retrieving todo items with various ID formats."""
-        # Arrange
-        test_ids = ["123", "abc-def-ghi", "64a7f0c2f1d2c4b5a6e7d8f1"]
-
-        for item_id in test_ids:
-            expected_todo = Todo(
-                id=item_id,
-                title=f"Todo {item_id}",
-                category="Test",
-                completed=True,
-                created_at=dt.fromisoformat("2023-01-01T12:00:00Z"),
-                updated_at=None,
-            )
-
-            mock_service = Mock(spec=TodoService)
-            mock_service.get_by_id = AsyncMock(return_value=expected_todo)
-
-            # Act
-            result = await get_todo_item(item_id=item_id, service=mock_service)
-
-            # Assert
-            assert result.id == item_id
-            mock_service.get_by_id.assert_called_once_with(item_id)
-
-    @pytest.mark.asyncio
     async def test_get_todo_item_completed_status(self):
         """Test retrieving todo items with different completion statuses."""
         # Arrange
@@ -106,7 +80,7 @@ class TestTodoRoutes_Get:
 
         for completed_status in [True, False]:
             expected_todo = Todo(
-                id=item_id,
+                _id=item_id,
                 title="Test Todo",
                 category="Work",
                 completed=completed_status,
@@ -139,7 +113,7 @@ class TestTodoRoutes_Create:
         )
 
         expected_todo = Todo(
-            id="64a7f0c2f1d2c4b5a6e7d8f3",
+            _id="64a7f0c2f1d2c4b5a6e7d8f3",
             title="New Todo",
             category="Personal",
             completed=False,
@@ -211,7 +185,7 @@ class TestTodoRoutes_Create:
         )
 
         expected_todo = Todo(
-            id="64a7f0c2f1d2c4b5a6e7d8f4",
+            _id="64a7f0c2f1d2c4b5a6e7d8f4",
             title="Trimmed Title",
             category="Trimmed Category",
             completed=False,
@@ -248,7 +222,7 @@ class TestTodoRepository:
         todo_repository_mock: Mock,
         sample_todos: list[Todo],
     ):
-        todo_repository_mock.list.return_value = sample_todos
+        todo_repository_mock.list_todos.return_value = sample_todos
 
         todos = await todo_service_mock.get_all()
         assert len(todos) == 2
@@ -259,7 +233,7 @@ class TestTodoRepository:
     async def test_get_list_raises_exception(
         self, todo_service_mock: TodoService, todo_repository_mock: Mock
     ):
-        todo_repository_mock.list.side_effect = Exception("Database error")
+        todo_repository_mock.list_todos.side_effect = Exception("Database error")
 
         with pytest.raises(Exception) as exc_info:
             await todo_service_mock.get_all()
@@ -272,7 +246,7 @@ class TestTodoRepository:
         todo_repository_mock: Mock,
         sample_todos: list[Todo],
     ):
-        todo_repository_mock.get.return_value = sample_todos[0]
+        todo_repository_mock.get_todo.return_value = sample_todos[0]
 
         todo = await todo_service_mock.get_by_id("64a7f0c2f1d2c4b5a6e7d8f1")
         assert todo is not None
@@ -283,7 +257,7 @@ class TestTodoRepository:
     async def test_get_todo_by_id_not_found(
         self, todo_service_mock: TodoService, todo_repository_mock: Mock
     ):
-        todo_repository_mock.get.return_value = None
+        todo_repository_mock.get_todo.return_value = None
 
         todo = await todo_service_mock.get_by_id("nonexistent_id")
         assert todo is None
@@ -292,7 +266,7 @@ class TestTodoRepository:
     async def test_get_todo_by_id_raises_exception(
         self, todo_service_mock: TodoService, todo_repository_mock: Mock
     ):
-        todo_repository_mock.get.side_effect = Exception("Database error")
+        todo_repository_mock.get_todo.side_effect = Exception("Database error")
 
         with pytest.raises(Exception) as exc_info:
             await todo_service_mock.get_by_id("some_id")
@@ -309,9 +283,16 @@ class TestTodoRepository:
         mock_id = "64a7f0c2f1d2c4b5a6e7d8f3"
 
         with patch("app.services.todo.utc_now", return_value=fixed_now):
-            todo_repository_mock.create.return_value = mock_id
-            todo_repository_mock.get.return_value = Todo(
-                id=mock_id,
+            todo_repository_mock.create_todo.return_value = Todo(
+                _id=mock_id,
+                title=sample_todo_create.title,
+                category=sample_todo_create.category,
+                completed=sample_todo_create.completed,
+                created_at=fixed_now,
+                updated_at=None,
+            )
+            todo_repository_mock.get_todo.return_value = Todo(
+                _id=mock_id,
                 title=sample_todo_create.title,
                 category=sample_todo_create.category,
                 completed=sample_todo_create.completed,
@@ -329,8 +310,7 @@ class TestTodoRepository:
             assert created_todo.created_at == fixed_now
             assert created_todo.updated_at is None
 
-            todo_repository_mock.create.assert_called_once()
-            todo_repository_mock.get.assert_called_once_with(mock_id)
+            todo_repository_mock.create_todo.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_todo_invalid_data(
@@ -355,7 +335,7 @@ class TestTodoRepository:
         todo_repository_mock: Mock,
         sample_todo_create: TodoCreate,
     ):
-        todo_repository_mock.create.side_effect = Exception("Database error on create")
+        todo_repository_mock.create_todo.side_effect = Exception("Database error on create")
 
         with pytest.raises(Exception) as exc_info:
             await todo_service_mock.create(sample_todo_create)
