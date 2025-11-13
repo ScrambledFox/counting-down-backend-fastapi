@@ -26,14 +26,6 @@ async def get_flight_items(
     return sorted(flights, key=lambda x: x.departure_at, reverse=True)
 
 
-@router.get("/{flight_id}", summary="Get Flight Item", response_model=Flight)
-async def get_flight_item(
-    flight_id: str,
-    service: FlightServiceDep,
-) -> Flight | None:
-    return await service.get_flight_by_id(flight_id)
-
-
 @router.get(
     "/flight_number/{flight_code}",
     summary="Get Flight Item by Flight Number",
@@ -43,7 +35,31 @@ async def get_flight_item_by_code(
     flight_number: str,
     service: FlightServiceDep,
 ) -> Flight | None:
-    return await service.get_flight_by_flight_number(flight_number)
+    flight = await service.get_flight_by_flight_number(flight_number)
+    if flight is None:
+        raise NotFoundException("Flight", flight_number)
+    return flight
+
+
+@router.get("/{flight_id}:[a-fA-F0-9]{24}", summary="Get Flight Item", response_model=Flight)
+async def get_flight_item(
+    flight_id: str,
+    service: FlightServiceDep,
+) -> Flight | None:
+    flight = await service.get_flight_by_id(flight_id)
+    if flight is None:
+        raise NotFoundException("Flight", flight_id)
+    return flight
+
+
+@router.get("/next", summary="Get Next Most Recent and Active Flight Item", response_model=Flight)
+async def get_next_flight_item(
+    service: FlightServiceDep,
+) -> Flight | None:
+    flight = await service.get_next_flight()
+    if flight is None:
+        raise NotFoundException("Next Flight", "N/A")
+    return flight
 
 
 @router.post("/", summary="Create Flight", response_model=Flight)

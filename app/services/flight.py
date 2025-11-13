@@ -29,6 +29,9 @@ class FlightService:
                 return flight
         return None
 
+    async def get_next_flight(self) -> Flight | None:
+        return await self._repo.get_most_recent_active_flight()
+
     async def update_flight(self, flight_id: str, flight: Flight) -> Flight | None:
         return await self._repo.update_flight(flight_id, flight)
 

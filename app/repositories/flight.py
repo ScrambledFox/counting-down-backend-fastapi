@@ -27,9 +27,9 @@ class FlightRepository:
         doc = await self._collection.find_one(
             {"status": FlightStatus.ACTIVE}, sort=[("departure_at", -1)]
         )
-        if doc:
-            return Flight.model_validate(doc)
-        return None
+        if doc is None:
+            return None
+        return Flight.model_validate(doc)
 
     async def create_flight(self, flight: Flight) -> Flight:
         result = await self._collection.insert_one(
