@@ -40,8 +40,7 @@ async def get_db_client() -> AsyncClient:
 
 async def get_db() -> AsyncDB:
     client = await get_db_client()
-    db: AsyncDB = client[settings.mongo_app_name]
-    return db
+    return client[settings.mongo_app_name]
 
 
 async def close_db_client() -> None:

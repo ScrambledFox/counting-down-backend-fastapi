@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Any
+from typing import Annotated, Any
 
 from bson import ObjectId
 from fastapi import Depends
@@ -10,21 +10,22 @@ from app.schemas.v1.todo import Todo
 
 
 class TodoRepository:
-    def __init__(self, db: AsyncDB = Depends(get_db)):
+    def __init__(self, db: Annotated[AsyncDB, Depends(get_db)]) -> None:
         self._collection = db[settings.todos_collection_name]
 
     async def list_todos(self) -> list[Todo]:
-        cursor = self._collection.find()
+        cursor = self._collection.find().sort("created_at", -1)
         docs = await cursor.to_list(length=None)
-        return [Todo(**doc) for doc in docs]
+        return [Todo.model_validate(doc) for doc in docs]
 
     async def get_todo(self, todo_id: str) -> Todo | None:
         doc = await self._collection.find_one({"_id": ObjectId(todo_id)})
-        return Todo(**doc) if doc else None
+        return Todo.model_validate(doc) if doc else None
 
-    async def create_todo(self, payload: Todo) -> str:
-        doc = await self._collection.insert_one(dict(payload))
-        return str(doc.inserted_id)
+    async def create_todo(self, payload: Todo) -> Todo:
+        result = await self._collection.insert_one(dict(payload))
+        doc = await self._collection.find_one({"_id": result.inserted_id})
+        return Todo.model_validate(doc)
 
     async def update_todo(self, todo_id: str, data: Mapping[str, Any]) -> Todo | None:
         result = await self._collection.update_one({"_id": ObjectId(todo_id)}, {"$set": data})
@@ -42,4 +43,4 @@ class TodoRepository:
             [{"$set": {"completed": {"$not": "$completed"}}}],
             return_document=True,
         )
-        return Todo(**updated_doc) if updated_doc else None
+        return Todo.model_validate(updated_doc) if updated_doc else None

@@ -1,10 +1,14 @@
+from typing import Annotated
+
+from fastapi import Depends
+
 from app.core.time import utc_now
 from app.repositories.message import MessageRepository
 from app.schemas.v1.message import Message, MessageCreate
 
 
 class MessageService:
-    def __init__(self, repo: MessageRepository) -> None:
+    def __init__(self, repo: Annotated[MessageRepository, Depends()]):
         self._repo = repo
 
     async def get_all_messages(self) -> list[Message]:
@@ -19,13 +23,7 @@ class MessageService:
             message=message.message.strip(),
             created_at=utc_now(),
         )
-
-        created_id = await self._repo.create(new_message)
-
-        created = await self._repo.get(created_id)
-        if created is None:
-            raise RuntimeError(f"Failed to fetch newly created message with id {created_id}")
-        return created
+        return await self._repo.create(new_message)
 
     async def delete_message(self, message_id: str) -> bool:
         updated = await self._repo.update(

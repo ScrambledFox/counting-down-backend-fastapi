@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     todos_collection_name: str = "todos"
     messages_collection_name: str = "messages"
     flights_collection_name: str = "flights"
+    airports_collection_name: str = "airports"
 
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True)
 

@@ -1,16 +1,18 @@
 from datetime import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import Field
+
+from app.schemas.v1.base import CustomModel, MongoId
 
 
-class Message(BaseModel):
-    id: str | None = None
+class Message(CustomModel):
+    id: MongoId | None = Field(default=None, alias="_id")
     sender: str | None = None
     message: str
     created_at: dt
     deleted_at: dt | None = None
 
 
-class MessageCreate(BaseModel):
+class MessageCreate(CustomModel):
     sender: str | None = None
     message: str
