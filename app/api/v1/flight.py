@@ -2,8 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.exceptions import NotFoundException
-from app.schemas.v1.flight import Flight, FlightCreate
+from app.schemas.v1.base import MongoId
+from app.schemas.v1.exceptions import NotFoundException
+from app.schemas.v1.flight import Flight, FlightCreate, FlightNumber
+from app.schemas.v1.response import DeletedResponse
 from app.services.flight import FlightService
 
 router = APIRouter(tags=["flights"], prefix="/flights")
@@ -32,7 +34,7 @@ async def get_flight_items(
     response_model=Flight,
 )
 async def get_flight_item_by_code(
-    flight_number: str,
+    flight_number: FlightNumber,
     service: FlightServiceDep,
 ) -> Flight | None:
     flight = await service.get_flight_by_flight_number(flight_number)
@@ -41,9 +43,9 @@ async def get_flight_item_by_code(
     return flight
 
 
-@router.get("/{flight_id}:[a-fA-F0-9]{24}", summary="Get Flight Item", response_model=Flight)
+@router.get("/{flight_id}", summary="Get Flight Item", response_model=Flight)
 async def get_flight_item(
-    flight_id: str,
+    flight_id: MongoId,
     service: FlightServiceDep,
 ) -> Flight | None:
     flight = await service.get_flight_by_id(flight_id)
@@ -72,7 +74,7 @@ async def create_flight(
 
 @router.put("/{flight_id}", summary="Update Flight", response_model=Flight)
 async def update_flight(
-    flight_id: str,
+    flight_id: MongoId,
     flight: Flight,
     service: FlightServiceDep,
 ) -> Flight:
@@ -82,25 +84,23 @@ async def update_flight(
     return updated_flight
 
 
-@router.delete("/{flight_id}", summary="Delete Flight", response_model=dict[str, str])
+@router.delete("/{flight_id}", summary="Delete Flight")
 async def delete_flight(
-    flight_id: str,
+    flight_id: MongoId,
     service: FlightServiceDep,
-) -> dict[str, str]:
-    success = await service.delete_flight(flight_id)
+):
+    success = await service.delete_flight_by_id(flight_id)
     if not success:
         raise NotFoundException("Flight", flight_id)
-    return {"detail": "Flight deleted"}
+    return DeletedResponse()
 
 
-@router.delete(
-    "/code/{flight_code}", summary="Delete Flight by Code", response_model=dict[str, str]
-)
+@router.delete("/code/{flight_code}", summary="Delete Flight by Code")
 async def delete_flight_by_code(
     flight_code: str,
     service: FlightServiceDep,
-) -> dict[str, str]:
+):
     success = await service.delete_flight_by_code(flight_code)
     if not success:
         raise NotFoundException("Flight", flight_code)
-    return {"detail": "Flight deleted"}
+    return DeletedResponse()

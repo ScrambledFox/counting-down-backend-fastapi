@@ -35,7 +35,7 @@ class FlightService:
     async def update_flight(self, flight_id: str, flight: Flight) -> Flight | None:
         return await self._repo.update_flight(flight_id, flight)
 
-    async def delete_flight(self, flight_id: str) -> bool:
+    async def delete_flight_by_id(self, flight_id: str) -> bool:
         return await self._repo.delete_flight(flight_id)
 
     async def delete_flight_by_code(self, flight_code: str) -> bool:

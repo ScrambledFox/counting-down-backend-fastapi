@@ -2,9 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.exceptions import NotFoundException
 from app.schemas.v1.airport import Airport, AirportCodeParam, AirportCreate, IataCodeParam
+from app.schemas.v1.base import MongoId
+from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.flight import Flight
+from app.schemas.v1.response import DeletedResponse
 from app.services.airport import AirportService
 from app.services.flight import FlightService
 
@@ -26,7 +28,7 @@ async def search_airports(query: str, airport_service: AirportServiceDep) -> lis
 
 @router.get("/{airport_id}", summary="Get airport information by ID")
 async def get_airport_info_by_id(
-    airport_id: str, airport_service: AirportServiceDep
+    airport_id: MongoId, airport_service: AirportServiceDep
 ) -> Airport | None:
     airport = await airport_service.get_airport_by_id(airport_id)
     if not airport:
@@ -70,15 +72,19 @@ async def add_airport(airport_data: AirportCreate, airport_service: AirportServi
 
 
 @router.delete("/code/{airport_code}", summary="Delete an airport by icao or iata code")
-async def delete_airport(
-    airport_code: AirportCodeParam, airport_service: AirportServiceDep
-) -> bool:
-    return await airport_service.delete_airport_by_code(airport_code)
+async def delete_airport(airport_code: AirportCodeParam, airport_service: AirportServiceDep):
+    success = await airport_service.delete_airport_by_code(airport_code)
+    if not success:
+        raise NotFoundException("Airport", airport_code)
+    return DeletedResponse()
 
 
 @router.delete("/{airport_id}", summary="Delete an airport by ID")
-async def delete_airport_by_id(airport_id: str, airport_service: AirportServiceDep) -> bool:
-    return await airport_service.delete_airport_by_id(airport_id)
+async def delete_airport_by_id(airport_id: MongoId, airport_service: AirportServiceDep):
+    success = await airport_service.delete_airport_by_id(airport_id)
+    if not success:
+        raise NotFoundException("Airport", airport_id)
+    return DeletedResponse()
 
 
 @router.get("/{airport_code}/arrivals", summary="Get arrivals for an airport by icao or iata code")
