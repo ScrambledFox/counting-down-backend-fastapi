@@ -1,10 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.v1.base import CustomModel, MongoId
 
 
-class Todo(BaseModel):
-    id: str | None = None
+class Todo(CustomModel):
+    id: MongoId | None = Field(default=None, alias="_id")
     title: str
     category: str
     completed: bool
@@ -12,7 +14,7 @@ class Todo(BaseModel):
     updated_at: datetime | None = None
 
 
-class TodoUpdate(BaseModel):
+class TodoUpdate(CustomModel):
     title: str | None = None
     category: str | None = None
     completed: bool | None = None

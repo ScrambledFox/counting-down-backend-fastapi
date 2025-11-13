@@ -5,4 +5,8 @@ install:
     uv sync
 
 format:
-    ruff format .
+    ruff check --fix app tests
+    ruff format app tests
+
+test:
+    uv run pytest --cov=app --cov-report=term-missing tests

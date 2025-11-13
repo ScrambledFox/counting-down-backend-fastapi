@@ -1,22 +1,23 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 
 from app.core.exceptions import BadRequestException, NotFoundException
-from app.dependencies import get_todo_service
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
 
 router = APIRouter(tags=["todos"], prefix="/todos")
 
+TodoServiceDep = Annotated[TodoService, Depends()]
+
 
 @router.get("/", summary="Get Todo Items", response_model=list[Todo])
-async def get_todo_items(
-    service: TodoService = Depends(get_todo_service),
-) -> list[Todo]:
+async def get_todo_items(service: TodoServiceDep) -> list[Todo]:
     return await service.get_all()
 
 
 @router.get("/{item_id}", summary="Get Todo Item", response_model=Todo)
-async def get_todo_item(item_id: str, service: TodoService = Depends(get_todo_service)) -> Todo:
+async def get_todo_item(item_id: str, service: TodoServiceDep) -> Todo:
     item = await service.get_by_id(item_id)
     if not item:
         raise NotFoundException("Todo", item_id)
@@ -29,9 +30,7 @@ async def get_todo_item(item_id: str, service: TodoService = Depends(get_todo_se
     response_model=Todo,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_todo_item(
-    item: TodoCreate, service: TodoService = Depends(get_todo_service)
-) -> Todo:
+async def create_todo_item(item: TodoCreate, service: TodoServiceDep) -> Todo:
     try:
         return await service.create(item)
     except ValueError as e:
@@ -39,9 +38,7 @@ async def create_todo_item(
 
 
 @router.put("/{item_id}", summary="Update Todo Item", response_model=Todo)
-async def update_todo_item(
-    item_id: str, item: TodoUpdate, service: TodoService = Depends(get_todo_service)
-) -> Todo:
+async def update_todo_item(item_id: str, item: TodoUpdate, service: TodoServiceDep) -> Todo:
     try:
         updated_item = await service.update(item_id, item)
         if not updated_item:
@@ -51,10 +48,8 @@ async def update_todo_item(
         raise BadRequestException(detail=str(e)) from None
 
 
-@router.delete("/{item_id}", summary="Delete Todo Item")
-async def delete_todo_item(
-    item_id: str, service: TodoService = Depends(get_todo_service)
-) -> dict[str, str]:
+@router.delete("/{item_id}", summary="Delete Todo Item", response_model=dict[str, str])
+async def delete_todo_item(item_id: str, service: TodoServiceDep) -> dict[str, str]:
     success = await service.delete(item_id)
     if not success:
         raise NotFoundException("Todo", item_id)
@@ -66,9 +61,7 @@ async def delete_todo_item(
     summary="Toggle Todo Item Completion",
     response_model=Todo,
 )
-async def toggle_todo_item_completion(
-    item_id: str, service: TodoService = Depends(get_todo_service)
-) -> Todo:
+async def toggle_todo_item_completion(item_id: str, service: TodoServiceDep) -> Todo:
     updated_item = await service.toggle_completion(item_id)
     if not updated_item:
         raise NotFoundException("Todo", item_id)

@@ -43,6 +43,6 @@ register_exception_handlers(app)
 app.include_router(v1_api_router, prefix="/api/v1")
 
 
-@app.get("/health", tags=["meta"])
+@app.get("/health", tags=["meta"], response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok")
