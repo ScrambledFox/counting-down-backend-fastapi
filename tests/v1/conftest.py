@@ -1,9 +1,11 @@
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from typing import Annotated
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from fastapi import Depends
 
 from app.core.config import settings
 from app.db.client import AsyncDB, get_test_db
@@ -39,13 +41,13 @@ async def test_db() -> AsyncGenerator[AsyncDB]:
 
 
 @pytest_asyncio.fixture
-async def todo_repository_real(test_db: AsyncDB):
+async def todo_repository_real(test_db: Annotated[AsyncDB, Depends(get_db)]):
     """Real repository for integration tests."""
     return TodoRepository(db=test_db)
 
 
 @pytest_asyncio.fixture
-async def todo_service_real(todo_repository_real: TodoRepository):
+async def todo_service_real(todo_repository_real: Annotated[TodoRepository, Depends()]):
     """Service with real repository for integration tests."""
     return TodoService(repo=todo_repository_real)
 
