@@ -3,7 +3,7 @@ from enum import Enum
 
 from pydantic import Field
 
-from app.schemas.v1.base import CustomModel, MongoId
+from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 
 type FlightNumber = str
 
@@ -24,7 +24,7 @@ class FlightBase(CustomModel):
 
 
 class Flight(FlightBase):
-    id: MongoId | None = Field(default=None, alias="_id")
+    id: DefaultMongoIdField = None
     created_at: datetime
     updated_at: datetime | None = None
 

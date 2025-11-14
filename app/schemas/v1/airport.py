@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, Field, StringConstraints, field_validator
+from pydantic import AfterValidator, StringConstraints, field_validator
 
-from app.schemas.v1.base import CustomModel, MongoId
+from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 
 type Coordinates = tuple[float, float]
 
@@ -68,7 +68,7 @@ class AirportBase(CustomModel):
 
 
 class Airport(AirportBase):
-    id: MongoId | None = Field(default=None, alias="_id")
+    id: DefaultMongoIdField = None
     created_at: datetime
     updated_at: datetime | None = None
 
