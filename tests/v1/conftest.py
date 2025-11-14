@@ -41,7 +41,7 @@ async def test_db() -> AsyncGenerator[AsyncDB]:
 
 
 @pytest_asyncio.fixture
-async def todo_repository_real(test_db: Annotated[AsyncDB, Depends(get_db)]):
+async def todo_repository_real(test_db: Annotated[AsyncDB, Depends(get_test_db)]):
     """Real repository for integration tests."""
     return TodoRepository(db=test_db)
 

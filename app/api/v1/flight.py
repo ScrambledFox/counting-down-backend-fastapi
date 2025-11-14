@@ -44,6 +44,16 @@ async def get_flight_item_by_code(
     return flight
 
 
+@router.get("/next", summary="Get Next Most Recent and Active Flight Item", response_model=Flight)
+async def get_next_flight_item(
+    service: FlightServiceDep,
+) -> Flight | None:
+    flight = await service.get_next_flight()
+    if flight is None:
+        raise NotFoundException("Next Flight", "N/A")
+    return flight
+
+
 @router.get("/{flight_id}", summary="Get Flight Item", response_model=Flight)
 async def get_flight_item(
     flight_id: MongoId,
@@ -52,16 +62,6 @@ async def get_flight_item(
     flight = await service.get_flight_by_id(flight_id)
     if flight is None:
         raise NotFoundException("Flight", flight_id)
-    return flight
-
-
-@router.get("/next", summary="Get Next Most Recent and Active Flight Item", response_model=Flight)
-async def get_next_flight_item(
-    service: FlightServiceDep,
-) -> Flight | None:
-    flight = await service.get_next_flight()
-    if flight is None:
-        raise NotFoundException("Next Flight", "N/A")
     return flight
 
 
