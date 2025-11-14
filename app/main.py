@@ -22,12 +22,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="CountingDown API", version="0.1.0", lifespan=lifespan)
 
-# Configure CORS middleware
-origins: list[str] = []
-if settings.frontend_url:
-    origins.append(settings.frontend_url)
+if settings.frontend_urls and len(settings.frontend_urls) > 0:
+    origins: list[str] = list(dict.fromkeys(settings.frontend_urls))
+elif settings.frontend_url:
+    origins = [settings.frontend_url]
 else:
-    origins.append("http://localhost:3000")
+    origins = ["http://localhost:8080"]
 
 app.add_middleware(
     CORSMiddleware,

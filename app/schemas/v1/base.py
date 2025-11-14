@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 
 from app.models.db import Document
 
@@ -17,13 +17,11 @@ def datetime_to_utc_str(dt: datetime) -> str:
 
 
 def validate_mongo_id(v: Any) -> str:
-    # Allow raw ObjectId and coerce to its 24-char hex string
     if isinstance(v, ObjectId):
         v = str(v)
 
-    # Allow None to pass through when the field is Optional[MongoId]
     if v is None:
-        return v  # type: ignore[return-value]
+        return v
 
     if not isinstance(v, str):
         raise TypeError("MongoId must be a string or ObjectId")
@@ -33,6 +31,7 @@ def validate_mongo_id(v: Any) -> str:
 
 
 MongoId = Annotated[str, BeforeValidator(validate_mongo_id)]
+DefaultMongoIdField = Annotated[MongoId | None, Field(alias="_id", default=None)]
 
 
 class CustomModel(BaseModel):

@@ -46,9 +46,9 @@ class AirportRepository:
         )
         return Airport.model_validate(doc) if doc else None
 
-    async def add_airport(self, airport_data: Airport) -> Airport:
+    async def create_airport(self, airport: Airport) -> Airport:
         result = await self._collection.insert_one(
-            airport_data.model_dump(by_alias=True, exclude_none=True)
+            airport.model_dump(by_alias=True, exclude_none=True)
         )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Airport.model_validate(doc)

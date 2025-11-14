@@ -1,13 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import Depends, status
 
+from app.api.routing import make_router
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.response import DeletedResponse
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
 
-router = APIRouter(tags=["todos"], prefix="/todos")
+router = make_router()
 
 TodoServiceDep = Annotated[TodoService, Depends()]
 

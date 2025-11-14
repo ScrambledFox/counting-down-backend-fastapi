@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 
-from app.schemas.v1.base import CustomModel, MongoId
+from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 
 
 class Todo(CustomModel):
-    id: MongoId | None = Field(default=None, alias="_id")
+    id: DefaultMongoIdField = None
     title: str
     category: str
     completed: bool

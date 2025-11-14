@@ -8,7 +8,7 @@ import pytest_asyncio
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_db
+from app.db.client import AsyncDB, get_test_db
 from app.repositories.todo import TodoRepository
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
@@ -31,7 +31,7 @@ def todo_service_mock(todo_repository_mock: TodoRepository):
 @pytest_asyncio.fixture
 async def test_db() -> AsyncGenerator[AsyncDB]:
     """Real database connection for integration tests."""
-    db = await get_db()
+    db = await get_test_db()
     collection = db[settings.todos_collection_name]
     # Clean up before test
     await collection.delete_many({})
@@ -57,7 +57,7 @@ async def todo_service_real(todo_repository_real: Annotated[TodoRepository, Depe
 def sample_todos() -> list[Todo]:
     return [
         Todo(
-            _id="64a7f0c2f1d2c4b5a6e7d8f1",
+            id="64a7f0c2f1d2c4b5a6e7d8f1",
             title="Test Todo 1",
             category="Testing",
             completed=False,
@@ -65,7 +65,7 @@ def sample_todos() -> list[Todo]:
             updated_at=None,
         ),
         Todo(
-            _id="64a7f0c2f1d2c4b5a6e7d8f2",
+            id="64a7f0c2f1d2c4b5a6e7d8f2",
             title="Test Todo 2",
             category="Testing",
             completed=True,
@@ -78,7 +78,7 @@ def sample_todos() -> list[Todo]:
 @pytest.fixture
 def sample_todo() -> Todo:
     return Todo(
-        _id="64a7f0c2f1d2c4b5a6e7d8f1",
+        id="64a7f0c2f1d2c4b5a6e7d8f1",
         title="Sample Todo",
         category="General",
         completed=False,
