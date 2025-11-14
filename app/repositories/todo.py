@@ -24,7 +24,7 @@ class TodoRepository:
 
     async def create_todo(self, todo: Todo) -> Todo:
         result = await self._collection.insert_one(
-            todo.model_dump(by_alias=True)
+            todo.model_dump(by_alias=True, exclude_none=True)
         )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Todo.model_validate(doc)

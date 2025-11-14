@@ -1,5 +1,6 @@
 from typing import Any
 
+from fastapi import APIRouter
 from fastapi.routing import APIRoute
 
 
@@ -10,3 +11,8 @@ class NoAliasAPIRoute(APIRoute):
         # setdefault would not override it. We assign unconditionally.
         kwargs["response_model_by_alias"] = False
         super().__init__(*args, **kwargs)
+
+
+def make_router() -> APIRouter:
+    """APIRouter Factory with NoAliasAPIRoute as the route class."""
+    return APIRouter(route_class=NoAliasAPIRoute)

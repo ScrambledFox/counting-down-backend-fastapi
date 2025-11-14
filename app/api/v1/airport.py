@@ -1,7 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import Depends
 
+from app.api.routing import make_router
 from app.schemas.v1.airport import Airport, AirportCodeParam, AirportCreate, IataCodeParam
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import NotFoundException
@@ -10,7 +11,7 @@ from app.schemas.v1.response import DeletedResponse
 from app.services.airport import AirportService
 from app.services.flight import FlightService
 
-router = APIRouter(tags=["airport"], prefix="/airport")
+router = make_router()
 
 AirportServiceDep = Annotated[AirportService, Depends()]
 FlightServiceDep = Annotated[FlightService, Depends()]

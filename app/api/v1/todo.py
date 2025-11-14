@@ -1,22 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import Depends, status
 
-from app.api.routing import NoAliasAPIRoute
+from app.api.routing import make_router
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.response import DeletedResponse
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
 
-"""Todo API routes.
-
-Ensure responses serialize Mongo `_id` field as `id` by using `NoAliasAPIRoute` which
-sets `response_model_by_alias=False` by default. Each route returns Pydantic models
-with a field named `id` (validation_alias `_id`) so they hydrate from Mongo documents
-while presenting `id` externally.
-"""
-
-router = APIRouter(tags=["todos"], prefix="/todos", route_class=NoAliasAPIRoute)
+router = make_router()
 
 TodoServiceDep = Annotated[TodoService, Depends()]
 

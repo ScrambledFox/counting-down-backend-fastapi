@@ -42,6 +42,9 @@ async def get_db() -> AsyncDB:
     client = await get_db_client()
     return client[settings.mongo_app_name]
 
+async def get_test_db() -> AsyncDB:
+    client = await get_db_client()
+    return client["test"]
 
 async def close_db_client() -> None:
     global _client

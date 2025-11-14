@@ -26,7 +26,7 @@ class AirportService:
 
     async def add_airport(self, airport_data: AirportCreate) -> Airport:
         new_airport: Airport = Airport(**airport_data.model_dump(), created_at=utc_now())
-        return await self._repo.add_airport(new_airport)
+        return await self._repo.create_airport(new_airport)
 
     async def delete_airport_by_code(self, airport_code: AirportCodeParam) -> bool:
         normalized = airport_code.upper()

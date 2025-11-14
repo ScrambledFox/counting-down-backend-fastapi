@@ -1,14 +1,14 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import Depends
 
+from app.api.routing import make_router
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.message import Message, MessageCreate
 from app.schemas.v1.response import DeletedResponse
 from app.services.message import MessageService
 
-router = APIRouter(tags=["messages"], prefix="/messages")
-
+router = make_router()
 
 MessageServiceDep = Annotated[MessageService, Depends()]
 
