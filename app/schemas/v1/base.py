@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import AliasChoices, BaseModel, BeforeValidator, Field
 
 from app.models.db import Document
 
@@ -31,7 +31,9 @@ def validate_mongo_id(v: Any) -> str:
 
 
 MongoId = Annotated[str, BeforeValidator(validate_mongo_id)]
-DefaultMongoIdField = Annotated[MongoId | None, Field(alias="_id", default=None)]
+DefaultMongoIdField = Annotated[
+    MongoId | None, Field(validation_alias=AliasChoices("_id", "id"), default=None)
+]
 
 
 class CustomModel(BaseModel):

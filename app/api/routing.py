@@ -9,7 +9,7 @@ class NoAliasAPIRoute(APIRoute):
         # Force disable alias-based serialization so fields use their Python names.
         # FastAPI's decorator injects response_model_by_alias=True explicitly; using
         # setdefault would not override it. We assign unconditionally.
-        kwargs["response_model_by_alias"] = False
+        # kwargs["response_model_by_alias"] = False
         super().__init__(*args, **kwargs)
 
 

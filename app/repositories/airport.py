@@ -1,10 +1,12 @@
 from typing import Annotated
 
+from bson import ObjectId
 from fastapi import Depends
 
 from app.core.config import settings
 from app.db.client import AsyncDB, get_db
 from app.schemas.v1.airport import Airport
+from app.schemas.v1.base import MongoId
 
 
 class AirportRepository:
@@ -31,8 +33,9 @@ class AirportRepository:
         docs = await cursor.to_list(length=None)
         return [Airport.model_validate(doc) for doc in docs]
 
-    async def get_airport_by_id(self, airport_id: str) -> Airport | None:
-        doc = await self._collection.find_one({"_id": airport_id})
+    async def get_airport_by_id(self, airport_id: MongoId) -> Airport | None:
+        doc = await self._collection.find_one({"_id": ObjectId(airport_id)})
+        print(f"Doc {doc}")
         return Airport.model_validate(doc) if doc else None
 
     async def get_airport_by_code(self, airport_code: str) -> Airport | None:

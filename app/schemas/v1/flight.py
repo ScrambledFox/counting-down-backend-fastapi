@@ -1,23 +1,16 @@
 from datetime import datetime
-from enum import Enum
 
 from pydantic import Field
 
+from app.models.flight import FlightNumber, FlightStatus
+from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import CustomModel, DefaultMongoIdField
-
-type FlightNumber = str
-
-
-class FlightStatus(str, Enum):
-    DRAFT = "DRAFT"
-    ACTIVE = "ACTIVE"
-    CANCELLED = "CANCELLED"
 
 
 class FlightBase(CustomModel):
     flight_number: FlightNumber
-    departure_airport_icao: str
-    arrival_airport_icao: str
+    departure_airport: Airport
+    arrival_airport: Airport
     departure_at: datetime
     arrival_at: datetime
     status: FlightStatus

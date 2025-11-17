@@ -5,8 +5,10 @@ from fastapi import Depends
 from app.core.config import settings
 from app.db.client import AsyncDB, get_db
 from app.models.db import Query
+from app.models.flight import Flight
 from app.schemas.v1.airport import Airport
-from app.schemas.v1.flight import Flight, FlightStatus
+from app.schemas.v1.base import MongoId
+from app.schemas.v1.flight import FlightStatus
 
 
 class FlightRepository:
@@ -38,19 +40,17 @@ class FlightRepository:
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Flight.model_validate(doc)
 
-    async def get_flight(self, flight_id: str) -> Flight | None:
+    async def get_flight(self, flight_id: MongoId) -> Flight | None:
         doc = await self._collection.find_one({"_id": flight_id})
         if doc:
             return Flight.model_validate(doc)
         return None
 
-    async def update_flight(self, flight_id: str, flight: Flight) -> Flight | None:
-        result = await self._collection.update_one({"_id": flight_id}, {"$set": dict(flight)})
-        if result.modified_count > 0:
-            return await self.get_flight(flight_id)
-        return None
+    async def update_flight(self, flight_id: MongoId, flight: Flight) -> Flight | None:
+        await self._collection.update_one({"_id": flight_id}, {"$set": dict(flight)})
+        return await self.get_flight(flight_id)
 
-    async def delete_flight(self, flight_id: str) -> bool:
+    async def delete_flight(self, flight_id: MongoId) -> bool:
         result = await self._collection.delete_one({"_id": flight_id})
         return result.deleted_count > 0
 
