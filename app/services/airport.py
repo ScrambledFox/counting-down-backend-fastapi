@@ -4,7 +4,8 @@ from fastapi import Depends
 
 from app.core.time import utc_now
 from app.repositories.airport import AirportRepository
-from app.schemas.v1.airport import Airport, AirportCodeParam, AirportCreate
+from app.schemas.v1.airport import Airport, AirportCode, AirportCreate
+from app.schemas.v1.base import MongoId
 
 
 class AirportService:
@@ -17,10 +18,10 @@ class AirportService:
     async def search_airports(self, query: str) -> list[Airport]:
         return await self._repo.search_airports(query)
 
-    async def get_airport_by_id(self, airport_id: str) -> Airport | None:
+    async def get_airport_by_id(self, airport_id: MongoId) -> Airport | None:
         return await self._repo.get_airport_by_id(airport_id)
 
-    async def get_airport_by_code(self, airport_code: AirportCodeParam) -> Airport | None:
+    async def get_airport_by_code(self, airport_code: AirportCode) -> Airport | None:
         normalized = airport_code.upper()
         return await self._repo.get_airport_by_code(normalized)
 
@@ -28,9 +29,9 @@ class AirportService:
         new_airport: Airport = Airport(**airport_data.model_dump(), created_at=utc_now())
         return await self._repo.create_airport(new_airport)
 
-    async def delete_airport_by_code(self, airport_code: AirportCodeParam) -> bool:
+    async def delete_airport_by_code(self, airport_code: AirportCode) -> bool:
         normalized = airport_code.upper()
         return await self._repo.delete_airport_by_code(normalized)
 
-    async def delete_airport_by_id(self, airport_id: str) -> bool:
+    async def delete_airport_by_id(self, airport_id: MongoId) -> bool:
         return await self._repo.delete_airport_by_id(airport_id)

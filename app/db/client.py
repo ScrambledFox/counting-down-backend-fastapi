@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import settings
 from app.models.db import Document
+from app.util.mongo import StrictDatabase
 
 type AsyncDB = AsyncIOMotorDatabase[Document]
 type AsyncClient = AsyncIOMotorClient[Document]
@@ -40,15 +41,13 @@ async def get_db_client() -> AsyncClient:
 
 async def get_db() -> AsyncDB:
     client = await get_db_client()
-    return client[settings.mongo_app_name]
+    # Wrap DB to enforce _id conversion in collection filters
+    return StrictDatabase(client[settings.mongo_app_name])  # type: ignore[return-value]
+
 
 async def get_test_db() -> AsyncDB:
     client = await get_db_client()
-    return client["test"]
-
-async def get_test_db() -> AsyncDB:
-    client = await get_db_client()
-    return client["test"]
+    return StrictDatabase(client["test"])  # type: ignore[return-value]
 
 
 async def close_db_client() -> None:

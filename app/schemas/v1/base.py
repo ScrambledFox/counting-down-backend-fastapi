@@ -3,8 +3,13 @@ from typing import Annotated, Any
 from zoneinfo import ZoneInfo
 
 from bson import ObjectId
-from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    Field,
+    WithJsonSchema,
+)
 
 from app.models.db import Document
 
@@ -30,15 +35,38 @@ def validate_mongo_id(v: Any) -> str:
     return v
 
 
-MongoId = Annotated[str, BeforeValidator(validate_mongo_id)]
-DefaultMongoIdField = Annotated[MongoId | None, Field(alias="_id", default=None)]
+def _to_object_id(v: Any) -> ObjectId | None:
+    if v is None:
+        return None
+    if isinstance(v, ObjectId):
+        return v
+    if isinstance(v, str):
+        if len(v) != 24:
+            raise ValueError("MongoId string must be 24 characters long")
+        return ObjectId(v)
+    raise TypeError("MongoId must be a string or ObjectId")
+
+
+def to_mongo_object_id(v: Any) -> ObjectId | None:
+    return _to_object_id(v)
+
+
+MongoId = Annotated[
+    str,
+    BeforeValidator(validate_mongo_id),
+    WithJsonSchema({"type": "string", "pattern": "^[a-fA-F0-9]{24}$"}),
+]
+
+DefaultMongoIdField = Annotated[
+    MongoId | None, Field(validation_alias=AliasChoices("_id", "id"), default=None)
+]
 
 
 class CustomModel(BaseModel):
     model_config = {
         "populate_by_name": True,
+        "arbitrary_types_allowed": True,
     }
 
     def serialize(self) -> Document:
-        default_dict = self.model_dump()
-        return jsonable_encoder(default_dict)
+        return self.model_dump(mode="json", by_alias=True, exclude_none=True)

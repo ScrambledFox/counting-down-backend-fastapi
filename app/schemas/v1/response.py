@@ -1,5 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
+
+from app.schemas.v1.base import CustomModel
 
 
-class DeletedResponse(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"detail": "Item has been deleted"})
+class DeletedResponse(CustomModel):
+    model_config = ConfigDict(from_attributes=True)
+    deleted: bool = True

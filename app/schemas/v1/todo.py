@@ -12,6 +12,7 @@ class Todo(CustomModel):
     completed: bool
     created_at: datetime
     updated_at: datetime | None = None
+    deleted_at: datetime | None = None
 
 
 class TodoUpdate(CustomModel):
