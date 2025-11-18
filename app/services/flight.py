@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import Depends
@@ -9,7 +10,7 @@ from app.repositories.flight import FlightRepository
 from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.flight import Flight as FlightSchema
-from app.schemas.v1.flight import FlightCreate, FlightStatus
+from app.schemas.v1.flight import FlightCreate, FlightStatus, FlightUpdate
 
 
 class FlightService:
@@ -24,17 +25,6 @@ class FlightService:
     async def _to_schema(self, flight: FlightModel) -> FlightSchema:
         departure_airport = await self._airports.get_airport_by_id(flight.departure_airport_id)
         arrival_airport = await self._airports.get_airport_by_id(flight.arrival_airport_id)
-
-        # Debug some values to help trace issues
-        print(f"Mapping flight ID {flight.id} to schema.")
-        print(
-            f"Departure airport ID: {flight.departure_airport_id}, "
-            f"Arrival airport ID: {flight.arrival_airport_id}"
-        )
-        print(
-            f"Fetched departure airport: {departure_airport}, "
-            f"Fetched arrival airport: {arrival_airport}"
-        )
 
         if departure_airport is None or arrival_airport is None:
             raise ValueError("Airport not found")
@@ -53,11 +43,34 @@ class FlightService:
         return await self._map_list_to_schema(flights)
 
     async def create_flight(self, flight: FlightCreate) -> FlightSchema:
-        new_flight = FlightModel(**flight.model_dump(), created_at=utc_now())
+        departure_airport, arrival_airport = await asyncio.gather(
+            self._airports.get_airport_by_code(flight.departure_airport_icao),
+            self._airports.get_airport_by_code(flight.arrival_airport_icao),
+        )
+        if departure_airport is None:
+            raise ValueError(
+                f"Departure airport with ICAO {flight.departure_airport_icao} not found"
+            )
+        if arrival_airport is None:
+            raise ValueError(f"Arrival airport with ICAO {flight.arrival_airport_icao} not found")
+
+        now = utc_now()
+        payload = flight.model_dump()
+        payload.pop("departure_airport_icao")
+        payload.pop("arrival_airport_icao")
+        payload.update(
+            departure_airport_id=departure_airport.id,
+            arrival_airport_id=arrival_airport.id,
+            created_at=now,
+            updated_at=None,
+            status=payload.get("status", FlightStatus.DRAFT),
+        )
+
+        new_flight = FlightModel(**payload)
         created_flight = await self._flights.create_flight(new_flight)
         return await self._to_schema(created_flight)
 
-    async def get_flight_by_id(self, flight_id: str) -> FlightSchema | None:
+    async def get_flight_by_id(self, flight_id: MongoId) -> FlightSchema | None:
         flight = await self._flights.get_flight(flight_id)
         if flight is None:
             return None
@@ -76,14 +89,44 @@ class FlightService:
             return None
         return await self._to_schema(flight)
 
-    async def update_flight(self, flight_id: MongoId, flight: FlightSchema) -> FlightSchema | None:
-        flight_model = FlightModel(**flight.model_dump())
-        updated_flight = await self._flights.update_flight(flight_id, flight_model)
+    async def update_flight(self, flight_id: MongoId, flight: FlightUpdate) -> FlightSchema | None:
+        print(f"Updating flight with ID: {flight_id} using data: {flight}")
+        print(f"Type of flight_id: {type(flight_id)}")
+        existing = await self._flights.get_flight(flight_id)
+
+        print(f"Existing flight: {existing}")
+
+        if existing is None:
+            return None
+
+        updates = flight.model_dump(exclude_unset=True)
+        if "departure_airport_icao" in updates:
+            departure_airport = await self._airports.get_airport_by_code(
+                updates.pop("departure_airport_icao")
+            )
+            if departure_airport is None:
+                raise ValueError(
+                    f"Departure airport with ICAO {flight.departure_airport_icao} not found"
+                )
+            updates["departure_airport_id"] = departure_airport.id
+
+        print(f"Updates after departure airport check: {updates}")
+
+        updates["updated_at"] = utc_now()
+
+        print(f"Final updates to apply: {updates}")
+
+        updated_flight = await self._flights.update_flight(
+            flight_id, existing.model_copy(update=updates)
+        )
+
+        print(f"Updated flight: {updated_flight}")
+
         if updated_flight is None:
             return None
         return await self._to_schema(updated_flight)
 
-    async def delete_flight_by_id(self, flight_id: str) -> bool:
+    async def delete_flight_by_id(self, flight_id: MongoId) -> bool:
         return await self._flights.delete_flight(flight_id)
 
     async def delete_flight_by_code(self, flight_code: str) -> bool:

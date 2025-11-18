@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends, status
 
 from app.api.routing import make_router
+from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.response import DeletedResponse
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
@@ -19,7 +20,7 @@ async def get_todo_items(service: TodoServiceDep) -> list[Todo]:
 
 
 @router.get("/{item_id}", summary="Get Todo Item", response_model=Todo)
-async def get_todo_item(item_id: str, service: TodoServiceDep) -> Todo:
+async def get_todo_item(item_id: MongoId, service: TodoServiceDep) -> Todo:
     item = await service.get_by_id(item_id)
     if not item:
         raise NotFoundException("Todo", item_id)
@@ -37,7 +38,7 @@ async def create_todo_item(item: TodoCreate, service: TodoServiceDep) -> Todo:
 
 
 @router.put("/{item_id}", summary="Update Todo Item", response_model=Todo)
-async def update_todo_item(item_id: str, item: TodoUpdate, service: TodoServiceDep) -> Todo:
+async def update_todo_item(item_id: MongoId, item: TodoUpdate, service: TodoServiceDep) -> Todo:
     try:
         updated_item = await service.update(item_id, item)
         if not updated_item:
@@ -48,7 +49,7 @@ async def update_todo_item(item_id: str, item: TodoUpdate, service: TodoServiceD
 
 
 @router.delete("/{item_id}", summary="Delete Todo Item")
-async def delete_todo_item(item_id: str, service: TodoServiceDep):
+async def delete_todo_item(item_id: MongoId, service: TodoServiceDep):
     success = await service.delete(item_id)
     if not success:
         raise NotFoundException("Todo", item_id)
@@ -60,7 +61,7 @@ async def delete_todo_item(item_id: str, service: TodoServiceDep):
     summary="Toggle Todo Item Completion",
     response_model=Todo,
 )
-async def toggle_todo_item_completion(item_id: str, service: TodoServiceDep) -> Todo:
+async def toggle_todo_item_completion(item_id: MongoId, service: TodoServiceDep) -> Todo:
     updated_item = await service.toggle_completion(item_id)
     if not updated_item:
         raise NotFoundException("Todo", item_id)

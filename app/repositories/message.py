@@ -6,6 +6,7 @@ from fastapi import Depends
 
 from app.core.config import settings
 from app.db.client import AsyncDB, get_db
+from app.schemas.v1.base import MongoId
 from app.schemas.v1.message import Message
 
 
@@ -23,7 +24,7 @@ class MessageRepository:
         docs = await cursor.to_list(length=None)
         return [Message.model_validate(doc) for doc in docs]
 
-    async def get(self, message_id: str) -> Message | None:
+    async def get(self, message_id: MongoId) -> Message | None:
         doc = await self._collection.find_one({"_id": ObjectId(message_id)})
         return Message.model_validate(doc) if doc else None
 
@@ -34,12 +35,12 @@ class MessageRepository:
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Message.model_validate(doc)
 
-    async def update(self, message_id: str, data: Mapping[str, Any]) -> Message | None:
+    async def update(self, message_id: MongoId, data: Mapping[str, Any]) -> Message | None:
         result = await self._collection.update_one({"_id": ObjectId(message_id)}, {"$set": data})
         if result.modified_count > 0:
             return await self.get(message_id)
         return None
 
-    async def delete(self, message_id: str) -> bool:
+    async def delete(self, message_id: MongoId) -> bool:
         result = await self._collection.delete_one({"_id": ObjectId(message_id)})
         return result.deleted_count > 0

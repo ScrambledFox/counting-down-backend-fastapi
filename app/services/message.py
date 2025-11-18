@@ -4,6 +4,7 @@ from fastapi import Depends
 
 from app.core.time import utc_now
 from app.repositories.message import MessageRepository
+from app.schemas.v1.base import MongoId
 from app.schemas.v1.message import Message, MessageCreate
 
 
@@ -14,7 +15,7 @@ class MessageService:
     async def get_all_messages(self) -> list[Message]:
         return await self._repo.list_not_deleted()
 
-    async def get_message_by_id(self, message_id: str) -> Message | None:
+    async def get_message_by_id(self, message_id: MongoId) -> Message | None:
         return await self._repo.get(message_id)
 
     async def create_message(self, message: MessageCreate) -> Message:
@@ -25,7 +26,7 @@ class MessageService:
         )
         return await self._repo.create(new_message)
 
-    async def delete_message(self, message_id: str) -> bool:
+    async def delete_message(self, message_id: MongoId) -> bool:
         updated = await self._repo.update(
             message_id,
             {

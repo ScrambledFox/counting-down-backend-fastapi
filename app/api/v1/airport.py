@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.api.routing import make_router
-from app.schemas.v1.airport import Airport, AirportCodeParam, AirportCreate, IataCodeParam
+from app.schemas.v1.airport import Airport, AirportCode, AirportCreate, IataCode
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.flight import Flight
@@ -39,7 +39,7 @@ async def get_airport_info_by_id(
 
 @router.get("/code/{airport_code}", summary="Get airport information by icao or iata code")
 async def get_airport_info(
-    airport_code: AirportCodeParam, airport_service: AirportServiceDep
+    airport_code: AirportCode, airport_service: AirportServiceDep
 ) -> Airport | None:
     airport = await airport_service.get_airport_by_code(airport_code)
     if not airport:
@@ -49,7 +49,7 @@ async def get_airport_info(
 
 @router.get("/iata/{airport_code}", summary="Get airport information by iata code")
 async def get_airport_info_iata(
-    airport_code: IataCodeParam, airport_service: AirportServiceDep
+    airport_code: IataCode, airport_service: AirportServiceDep
 ) -> Airport | None:
     airport = await airport_service.get_airport_by_code(airport_code)
     if not airport:
@@ -59,7 +59,7 @@ async def get_airport_info_iata(
 
 @router.get("/icao/{airport_code}", summary="Get airport information by icao code")
 async def get_airport_info_icao(
-    airport_code: AirportCodeParam, airport_service: AirportServiceDep
+    airport_code: AirportCode, airport_service: AirportServiceDep
 ) -> Airport | None:
     airport = await airport_service.get_airport_by_code(airport_code)
     if not airport:
@@ -73,7 +73,7 @@ async def add_airport(airport_data: AirportCreate, airport_service: AirportServi
 
 
 @router.delete("/code/{airport_code}", summary="Delete an airport by icao or iata code")
-async def delete_airport(airport_code: AirportCodeParam, airport_service: AirportServiceDep):
+async def delete_airport(airport_code: AirportCode, airport_service: AirportServiceDep):
     success = await airport_service.delete_airport_by_code(airport_code)
     if not success:
         raise NotFoundException("Airport", airport_code)
@@ -90,7 +90,7 @@ async def delete_airport_by_id(airport_id: MongoId, airport_service: AirportServ
 
 @router.get("/{airport_code}/arrivals", summary="Get arrivals for an airport by icao or iata code")
 async def get_airport_arrivals(
-    airport_code: AirportCodeParam,
+    airport_code: AirportCode,
     airport_service: AirportServiceDep,
     flight_service: FlightServiceDep,
 ) -> list[Flight] | None:
@@ -103,7 +103,7 @@ async def get_airport_arrivals(
 
 @router.get("/{airport_code}/departures", summary="Get departures for an airport by icao code")
 async def get_airport_departures(
-    airport_code: AirportCodeParam,
+    airport_code: AirportCode,
     airport_service: AirportServiceDep,
     flight_service: FlightServiceDep,
 ) -> list[Flight] | None:

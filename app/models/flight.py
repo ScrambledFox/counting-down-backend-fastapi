@@ -1,9 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
-
-from app.schemas.v1.base import DefaultMongoIdField, MongoId
+from app.schemas.v1.base import CustomModel, DefaultMongoIdField, MongoId
 
 type FlightNumber = str
 
@@ -14,7 +12,7 @@ class FlightStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
-class Flight(BaseModel):
+class Flight(CustomModel):
     id: DefaultMongoIdField = None
     flight_number: FlightNumber
     departure_airport_id: MongoId

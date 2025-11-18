@@ -20,7 +20,7 @@ class TestTodoRoutes_Get:
         # Arrange
         item_id = "64a7f0c2f1d2c4b5a6e7d8f1"
         expected_todo = Todo(
-            _id=item_id,
+            id=item_id,
             title="Test Todo",
             category="Work",
             completed=False,
@@ -80,7 +80,7 @@ class TestTodoRoutes_Get:
 
         for completed_status in [True, False]:
             expected_todo = Todo(
-                _id=item_id,
+                id=item_id,
                 title="Test Todo",
                 category="Work",
                 completed=completed_status,
@@ -113,7 +113,7 @@ class TestTodoRoutes_Create:
         )
 
         expected_todo = Todo(
-            _id="64a7f0c2f1d2c4b5a6e7d8f3",
+            id="64a7f0c2f1d2c4b5a6e7d8f3",
             title="New Todo",
             category="Personal",
             completed=False,
@@ -185,7 +185,7 @@ class TestTodoRoutes_Create:
         )
 
         expected_todo = Todo(
-            _id="64a7f0c2f1d2c4b5a6e7d8f4",
+            id="64a7f0c2f1d2c4b5a6e7d8f4",
             title="Trimmed Title",
             category="Trimmed Category",
             completed=False,
@@ -284,7 +284,7 @@ class TestTodoRepository:
 
         with patch("app.services.todo.utc_now", return_value=fixed_now):
             todo_repository_mock.create_todo.return_value = Todo(
-                _id=mock_id,
+                id=mock_id,
                 title=sample_todo_create.title,
                 category=sample_todo_create.category,
                 completed=sample_todo_create.completed,
@@ -292,7 +292,7 @@ class TestTodoRepository:
                 updated_at=None,
             )
             todo_repository_mock.get_todo.return_value = Todo(
-                _id=mock_id,
+                id=mock_id,
                 title=sample_todo_create.title,
                 category=sample_todo_create.category,
                 completed=sample_todo_create.completed,

@@ -1,5 +1,5 @@
-from pydantic import BaseModel
+from app.schemas.v1.base import CustomModel
 
 
-class HealthResponse(BaseModel):
+class HealthResponse(CustomModel):
     status: str

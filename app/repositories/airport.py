@@ -35,7 +35,6 @@ class AirportRepository:
 
     async def get_airport_by_id(self, airport_id: MongoId) -> Airport | None:
         doc = await self._collection.find_one({"_id": ObjectId(airport_id)})
-        print(f"Doc {doc}")
         return Airport.model_validate(doc) if doc else None
 
     async def get_airport_by_code(self, airport_code: str) -> Airport | None:
@@ -56,7 +55,7 @@ class AirportRepository:
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return Airport.model_validate(doc)
 
-    async def delete_airport_by_id(self, airport_id: str) -> bool:
+    async def delete_airport_by_id(self, airport_id: MongoId) -> bool:
         result = await self._collection.delete_one({"_id": airport_id})
         return result.deleted_count > 0
 

@@ -7,19 +7,19 @@ from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 
 type Coordinates = tuple[float, float]
 
-AirportCodeParam = Annotated[
+AirportCode = Annotated[
     str,
     StringConstraints(min_length=3, max_length=4, pattern=r"^[A-Za-z]{3,4}$"),
     AfterValidator(lambda v: v.upper()),
 ]
 
-IcaoCodeParam = Annotated[
+IcaoCode = Annotated[
     str,
     StringConstraints(min_length=4, max_length=4, pattern=r"^[A-Za-z]{4}$"),
     AfterValidator(lambda v: v.upper()),
 ]
 
-IataCodeParam = Annotated[
+IataCode = Annotated[
     str,
     StringConstraints(min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$"),
     AfterValidator(lambda v: v.upper()),

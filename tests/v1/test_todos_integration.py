@@ -63,7 +63,7 @@ class TestTodoRepository_Integration:
         self._assert_todo_equal(
             created_todo,
             Todo(
-                _id=created_todo.id,
+                id=created_todo.id,
                 title=sample_todo_create.title,
                 category=sample_todo_create.category,
                 completed=sample_todo_create.completed,
@@ -71,8 +71,6 @@ class TestTodoRepository_Integration:
                 updated_at=None,
             ),
         )
-
-        print("Created Todo:", created_todo)
 
         # Retrieve the created todo
         id = created_todo.id
@@ -89,7 +87,7 @@ class TestTodoRepository_Integration:
         self._assert_todo_equal(
             updated_todo,
             Todo(
-                _id=id,
+                id=id,
                 title="Updated Todo",
                 category=sample_todo_create.category,
                 completed=sample_todo_create.completed,
@@ -109,4 +107,5 @@ class TestTodoRepository_Integration:
 
         # Verify deletion
         deleted_todo = await todo_service_real.get_by_id(id)
-        assert deleted_todo is None
+        assert deleted_todo is not None
+        assert deleted_todo.deleted_at is not None
