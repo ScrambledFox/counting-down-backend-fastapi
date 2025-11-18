@@ -5,6 +5,7 @@ from bson import ObjectId
 from fastapi import Depends
 
 from app.core.config import settings
+from app.core.time import utc_now
 from app.db.client import AsyncDB, get_db
 from app.schemas.v1.todo import Todo
 
@@ -36,8 +37,10 @@ class TodoRepository:
         return None
 
     async def delete_todo(self, todo_id: str) -> bool:
-        result = await self._collection.delete_one({"_id": ObjectId(todo_id)})
-        return result.deleted_count > 0
+        result = await self._collection.update_one(
+            {"_id": ObjectId(todo_id)}, {"$set": {"deleted_at": utc_now()}}
+        )
+        return result.modified_count > 0
 
     async def toggle_todo(self, todo_id: str) -> Todo | None:
         updated_doc = await self._collection.find_one_and_update(
