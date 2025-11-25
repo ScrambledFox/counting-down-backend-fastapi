@@ -15,3 +15,11 @@ class ImageRepository:
             return data
         except Exception:
             return None
+
+    async def upload_bytes(self, key: str, data: bytes, content_type: str | None = None) -> None:
+        await self._s3_storage.upload_bytes(
+            bucket=settings.aws_s3_bucket,
+            key=key,
+            data=data,
+            content_type=content_type,
+        )
