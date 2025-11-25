@@ -18,18 +18,18 @@ User Story: As a user, I want to be able to only receive advent calender entries
     - [ ] DELETE /advent/:day
 
 - [ ] Add Image routes
-    - [ ] POST /image
-    - [ ] GET /image/:id
+    - [x] POST /image
+    - [x] GET /image/:id
     - [ ] DELETE /image/:id
 
 - [ ] Add Login route
 
 - [ ] Add AdventService
 
-- [ ] Add image repository
+- [x] Add image repository
 - [ ] Add advent repository
 
-- [ ] Add s3 db adapter
+- [x] Add s3 db adapter
 
 - [ ] Add auth middleware (api-key)
 - [ ] Add Session Manager / Auth Service

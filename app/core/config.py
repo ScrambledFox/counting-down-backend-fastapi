@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     messages_collection_name: str = "messages"
     flights_collection_name: str = "flights"
     airports_collection_name: str = "airports"
+    advent_collection_name: str = "advent_refs"
 
     aws_region: str = "eu-west-1"
     aws_s3_bucket: str = "my-app-bucket"
