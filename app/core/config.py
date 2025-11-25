@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     flights_collection_name: str = "flights"
     airports_collection_name: str = "airports"
 
+    aws_region: str = "eu-west-1"
+    aws_s3_bucket: str = "my-app-bucket"
+    aws_access_key: str | None = None
+    aws_secret_key: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True)
 
     @field_validator("frontend_urls", mode="before")

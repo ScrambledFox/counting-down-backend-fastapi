@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from app.models.db import Document
+from app.models.mongo import Document
 from app.schemas.v1.base import to_mongo_object_id
 
 

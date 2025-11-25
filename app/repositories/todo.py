@@ -6,7 +6,7 @@ from fastapi import Depends
 
 from app.core.config import settings
 from app.core.time import utc_now
-from app.db.client import AsyncDB, get_db
+from app.db.mongo_client import AsyncDB, get_db
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.todo import Todo
 

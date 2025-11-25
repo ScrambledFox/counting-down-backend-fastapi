@@ -3,9 +3,9 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_db
-from app.models.db import Query
+from app.db.mongo_client import AsyncDB, get_db
 from app.models.flight import Flight
+from app.models.mongo import Query
 from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.flight import FlightStatus
