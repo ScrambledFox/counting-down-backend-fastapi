@@ -18,7 +18,6 @@ class TodoRepository:
     async def list_todos(self) -> list[Todo]:
         cursor = self._collection.find().sort("created_at", -1)
         docs = await cursor.to_list(length=None)
-        print(docs)
         return [Todo.model_validate(doc) for doc in docs]
 
     async def get_todo(self, todo_id: MongoId) -> Todo | None:
