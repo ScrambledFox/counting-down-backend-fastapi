@@ -31,9 +31,11 @@ User Story: As a user, I want to be able to only receive advent calender entries
 
 - [x] Add s3 db adapter
 
-- [ ] Add auth middleware (api-key)
+- [x] Add auth middleware (api-key)
 - [x] Add Session Manager / Auth Service
 
 - [ ] health check endpoint for DB and S3
 
 - [ ] Add tests for advent routes
+- [ ] Add tests for image routes
+- [ ] Add tests for auth service
