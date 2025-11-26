@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     flights_collection_name: str = "flights"
     airports_collection_name: str = "airports"
     advent_collection_name: str = "advent_refs"
+    sessions_collection_name: str = "sessions"
+
+    access_key_danfeng: str = "danfeng_secret_key"
+    access_key_joris: str = "joris_secret_key"
+    session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
     aws_region: str = "eu-west-1"
     aws_s3_bucket: str = "my-app-bucket"

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routing import NoAliasAPIRoute
-from app.api.v1 import advent, airport, flight, image, message, todo
+from app.api.v1 import advent, airport, auth, flight, image, message, todo
 
 router = APIRouter(route_class=NoAliasAPIRoute)
 
@@ -11,3 +11,4 @@ router.include_router(flight.router, prefix="/flights", tags=["flights"])
 router.include_router(airport.router, prefix="/airports", tags=["airports"])
 router.include_router(image.router, prefix="/images", tags=["images"])
 router.include_router(advent.router, prefix="/advent", tags=["advent"])
+router.include_router(auth.router, tags=["login"])

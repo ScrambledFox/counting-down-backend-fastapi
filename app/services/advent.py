@@ -6,6 +6,7 @@ from app.core.time import utc_now
 from app.repositories.advent import AdventRepository
 from app.repositories.image import ImageRepository
 from app.schemas.v1.advent import AdventRef, AdventRefCreate, ImageActor
+from app.schemas.v1.exceptions import NotFoundException
 from app.util.crypto import generate_crypto_id
 
 
@@ -35,6 +36,10 @@ class AdventService:
 
         return await self._advent_repo.get_advent_ref_by_day(advent_day)
 
+    async def get_today_advent_refs(self) -> list[AdventRef]:
+        today = utc_now().day
+        return await self._advent_repo.get_advent_ref_by_day(today)
+
     async def create_advent_ref(
         self, advent_create: AdventRefCreate, image: UploadFile
     ) -> AdventRef:
@@ -54,3 +59,14 @@ class AdventService:
 
         created_ref = await self._advent_repo.create_advent_ref(new_advent_ref)
         return created_ref
+
+    async def delete_advent_ref_by_id(self, advent_ref_id: str) -> None:
+        advent_ref = await self._advent_repo.get_advent_ref_by_id(advent_ref_id)
+        if advent_ref is None:
+            raise NotFoundException("Advent ref not found")
+
+        # Delete image from storage - (Optional, depending on whether you want to keep images)
+        # await self._image_repo.delete_image(advent_ref.image_key)
+
+        # Delete advent ref entry
+        await self._advent_repo.delete_advent_ref_by_id(advent_ref_id)

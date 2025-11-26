@@ -8,31 +8,31 @@ User Story: As a user, I want to be able to upload, retrieve, and delete images 
 
 User Story: As a user, I want to be able to only receive advent calender entries if I provide valid authentication in the form of a password (tech: encrypteded version of pwd in x-api-key header, and checked in our auth middleware), so that my advent calendar entries are secure.
 
-- [ ] Add Advent Model
-- [ ] Add Image Reference Model
+- [x] Add Advent Model
+- [x] Add Image Reference Model
 
 - [ ] Add advent routes
-    - [ ] POST /advent
-    - [ ] GET /advent/today
-    - [ ] GET /advent/:day
+    - [x] POST /advent
+    - [x] GET /advent/today
+    - [x] GET /advent/:day
     - [ ] DELETE /advent/:day
 
 - [ ] Add Image routes
     - [x] POST /image
     - [x] GET /image/:id
-    - [ ] DELETE /image/:id
+    - [x] DELETE /image/:id
 
-- [ ] Add Login route
+- [x] Add Login route
 
-- [ ] Add AdventService
+- [x] Add AdventService
 
 - [x] Add image repository
-- [ ] Add advent repository
+- [x] Add advent repository
 
 - [x] Add s3 db adapter
 
 - [ ] Add auth middleware (api-key)
-- [ ] Add Session Manager / Auth Service
+- [x] Add Session Manager / Auth Service
 
 - [ ] health check endpoint for DB and S3
 

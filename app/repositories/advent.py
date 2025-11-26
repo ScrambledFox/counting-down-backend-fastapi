@@ -45,3 +45,7 @@ class AdventRepository:
         )
         doc = await self._collection.find_one({"_id": result.inserted_id})
         return AdventRef.model_validate(doc)
+
+    async def delete_advent_ref_by_id(self, advent_ref_id: MongoId) -> bool:
+        result = await self._collection.delete_one({"_id": ObjectId(advent_ref_id)})
+        return result.deleted_count > 0

@@ -28,6 +28,11 @@ async def list_advent_items(advent_service: AdventServiceDep) -> list[AdventRef]
     return await advent_service.list_advent_refs()
 
 
+@router.get("/today", summary="Get Today's Advent Items", response_model=list[AdventRef])
+async def get_today_advent_items(advent_service: AdventServiceDep) -> list[AdventRef]:
+    return await advent_service.get_today_advent_refs()
+
+
 @router.get("/day/{advent_day}", summary="Get Advent Item by Day", response_model=list[AdventRef])
 async def get_advent_items_by_day(
     advent_service: AdventServiceDep, advent_day: int, actor: ImageActor | None = None
@@ -38,3 +43,9 @@ async def get_advent_items_by_day(
 @router.get("/{id}", summary="Get Advent Item by ID", response_model=AdventRef | None)
 async def get_advent_item_by_id(id: str, advent_service: AdventServiceDep) -> AdventRef | None:
     return await advent_service.get_advent_ref_by_id(id)
+
+
+@router.delete("/{id}", summary="Delete Advent Item by ID")
+async def delete_advent_item_by_id(id: str, advent_service: AdventServiceDep) -> dict[str, str]:
+    await advent_service.delete_advent_ref_by_id(id)
+    return {"detail": f"Advent item with ID {id} has been deleted"}

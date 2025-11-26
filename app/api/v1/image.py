@@ -4,6 +4,7 @@ from fastapi import Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.routing import make_router
+from app.core.auth import require_session
 from app.schemas.v1.exceptions import NotFoundException
 from app.services.image import ImageService
 
@@ -12,8 +13,11 @@ router = make_router()
 ImageServiceDep = Annotated[ImageService, Depends()]
 
 
-@router.get("/{key:path}", summary="Get Image Item")
-async def get_image_item(key: str, service: ImageServiceDep) -> StreamingResponse:
+@router.get("/{key:path}", summary="Get Image Item", dependencies=[Depends(require_session)])
+async def get_image_item(
+    key: str,
+    service: ImageServiceDep,
+) -> StreamingResponse:
     data = await service.get_image_bytes_by_key(key)
     if data is None:
         raise NotFoundException("Image", key)
