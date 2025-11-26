@@ -1,5 +1,5 @@
 dev:
-    uv run fastapi dev app/main.py
+    uv run fastapi dev app/main.py --reload --host 0.0.0.0 --port 8000
 
 install:
     uv sync
