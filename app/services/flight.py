@@ -90,11 +90,7 @@ class FlightService:
         return await self._to_schema(flight)
 
     async def update_flight(self, flight_id: MongoId, flight: FlightUpdate) -> FlightSchema | None:
-        print(f"Updating flight with ID: {flight_id} using data: {flight}")
-        print(f"Type of flight_id: {type(flight_id)}")
         existing = await self._flights.get_flight(flight_id)
-
-        print(f"Existing flight: {existing}")
 
         if existing is None:
             return None
@@ -110,17 +106,11 @@ class FlightService:
                 )
             updates["departure_airport_id"] = departure_airport.id
 
-        print(f"Updates after departure airport check: {updates}")
-
         updates["updated_at"] = utc_now()
-
-        print(f"Final updates to apply: {updates}")
 
         updated_flight = await self._flights.update_flight(
             flight_id, existing.model_copy(update=updates)
         )
-
-        print(f"Updated flight: {updated_flight}")
 
         if updated_flight is None:
             return None
