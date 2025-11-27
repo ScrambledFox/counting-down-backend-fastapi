@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.time import utc_now
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
+from app.util.time import utc_now
 
 
 class TestTodoRepository_Integration:

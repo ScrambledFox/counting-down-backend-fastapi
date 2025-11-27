@@ -3,7 +3,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.core.time import utc_now
 from app.models.flight import Flight as FlightModel
 from app.repositories.airport import AirportRepository
 from app.repositories.flight import FlightRepository
@@ -11,6 +10,7 @@ from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.flight import Flight as FlightSchema
 from app.schemas.v1.flight import FlightCreate, FlightStatus, FlightUpdate
+from app.util.time import utc_now
 
 
 class FlightService:

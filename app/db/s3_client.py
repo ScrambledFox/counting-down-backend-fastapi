@@ -1,6 +1,11 @@
+from contextlib import closing
 from functools import lru_cache
+from io import BytesIO
 
+from boto3.s3.transfer import TransferConfig
 from boto3.session import Session
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 from types_boto3_s3 import S3Client
 
@@ -15,8 +20,14 @@ class Boto3S3Storage(S3Storage):
     def __init__(self, client: S3Client) -> None:
         self._client = client
         self._logger = get_logger("s3")
+        self._transfer_cfg = TransferConfig(
+            multipart_threshold=16 * 1024 * 1024,
+            multipart_chunksize=8 * 1024 * 1024,
+            max_concurrency=4,
+            use_threads=True,
+        )
 
-    async def upload_bytes(
+    async def upload_object(
         self,
         *,
         bucket: str,
@@ -25,41 +36,49 @@ class Boto3S3Storage(S3Storage):
         content_type: str | None = None,
     ) -> None:
         self._logger.debug(
-            "Uploading bytes to S3",
+            f"Uploading bytes to S3 with key: {key} and content_type: {content_type}",
             extra={"bucket": bucket, "key": key, "content_type": content_type},
         )
 
         def _upload() -> None:
+            extra_args: dict[str, str] = {}
             if content_type:
-                self._client.put_object(
-                    Bucket=bucket,
-                    Key=key,
-                    Body=data,
-                    ContentType=content_type,
-                )
-            else:
-                self._client.put_object(
-                    Bucket=bucket,
-                    Key=key,
-                    Body=data,
-                )
+                extra_args["ContentType"] = content_type
 
-        await run_in_threadpool(_upload)
+            buf = BytesIO(data)
+            self._client.upload_fileobj(
+                Fileobj=buf,
+                Bucket=bucket,
+                Key=key,
+                ExtraArgs=extra_args if extra_args else None,  # type: ignore[arg-type]
+                Config=self._transfer_cfg,
+            )
 
-    async def get_bytes(self, *, bucket: str, key: str) -> bytes:
+        try:
+            await run_in_threadpool(_upload)
+        except ClientError:
+            self._logger.exception("S3 upload failed", extra={"bucket": bucket, "key": key})
+            raise
+
+    async def get_object(self, *, bucket: str, key: str) -> bytes:
         self._logger.debug("Getting bytes from S3", extra={"bucket": bucket, "key": key})
 
         def _get() -> bytes:
             response = self._client.get_object(Bucket=bucket, Key=key)
-            body = response["Body"].read()
-            return body
+            body = response["Body"]
+            with closing(body):
+                return body.read()
 
-        data = await run_in_threadpool(_get)
-        self._logger.debug(
-            "Got bytes from S3",
-            extra={"bucket": bucket, "key": key, "length": len(data)},
-        )
-        return data
+        try:
+            data = await run_in_threadpool(_get)
+            self._logger.debug(
+                "Got bytes from S3",
+                extra={"bucket": bucket, "key": key, "length": len(data)},
+            )
+            return data
+        except ClientError:
+            self._logger.exception("S3 get_object failed", extra={"bucket": bucket, "key": key})
+            raise
 
     async def delete_object(self, *, bucket: str, key: str) -> None:
         self._logger.debug("Deleting S3 object", extra={"bucket": bucket, "key": key})
@@ -67,7 +86,11 @@ class Boto3S3Storage(S3Storage):
         def _delete() -> None:
             self._client.delete_object(Bucket=bucket, Key=key)
 
-        await run_in_threadpool(_delete)
+        try:
+            await run_in_threadpool(_delete)
+        except ClientError:
+            self._logger.exception("S3 delete_object failed", extra={"bucket": bucket, "key": key})
+            raise
 
     async def generate_presigned_url(
         self,
@@ -88,21 +111,35 @@ class Boto3S3Storage(S3Storage):
                 ExpiresIn=expires_in,
             )
 
-        url = await run_in_threadpool(_generate_url)
-        self._logger.debug(
-            "Generated presigned URL",
-            extra={"bucket": bucket, "key": key, "url": url},
-        )
-        return url
+        try:
+            url = await run_in_threadpool(_generate_url)
+            self._logger.debug(
+                "Generated presigned URL",
+                extra={"bucket": bucket, "key": key, "url": url},
+            )
+            return url
+        except ClientError:
+            self._logger.exception("S3 presign failed", extra={"bucket": bucket, "key": key})
+            raise
 
 
 @lru_cache
 def _get_s3_client() -> S3Client:
-    return Session(
+    session = Session(
         aws_access_key_id=settings.aws_access_key,
         aws_secret_access_key=settings.aws_secret_key,
         region_name=settings.aws_region,
-    ).client("s3")  # type: ignore
+    )
+    cfg = Config(
+        region_name=settings.aws_region,
+        retries={"max_attempts": 5, "mode": "standard"},
+        connect_timeout=5,
+        read_timeout=60,
+        signature_version="s3v4",
+        max_pool_connections=20,
+        s3={"addressing_style": "virtual"},
+    )
+    return session.client("s3", config=cfg)  # type: ignore
 
 
 def get_s3_storage() -> S3Storage:

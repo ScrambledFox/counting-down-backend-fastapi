@@ -3,10 +3,10 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.config import settings
-from app.core.time import utc_now
 from app.db.mongo_client import get_db
 from app.models.mongo import AsyncDB
 from app.schemas.v1.session import Session
+from app.util.time import utc_now
 
 
 class SessionRepository:

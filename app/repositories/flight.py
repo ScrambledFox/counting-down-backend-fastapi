@@ -35,7 +35,6 @@ class FlightRepository:
         docs = await cursor.to_list(length=None)
         return [Flight.model_validate(doc) for doc in docs]
 
-
     async def list_flights(self) -> list[Flight]:
         cursor = self._flights.find().sort("departure_at", -1)
         docs = await cursor.to_list(length=None)
