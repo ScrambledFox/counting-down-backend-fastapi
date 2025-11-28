@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
-from app.models.db import Document
+from app.models.mongo import Document
 from app.schemas.v1.base import to_mongo_object_id
 
 
@@ -23,22 +23,6 @@ def from_mongo(doc: Document) -> Document:
     return out
 
 
-def _convert_id_value(value: Any) -> Any:
-    """Convert a single value for _id or operator arrays, enforcing ObjectId.
-
-    - str(24 hex) -> ObjectId
-    - ObjectId -> unchanged
-    - other types -> unchanged
-    - invalid str -> raises ValueError/TypeError via to_mongo_object_id
-    """
-    try:
-        return to_mongo_object_id(value)
-    except Exception:
-        # Keep non-string values as-is; only enforce/convert strings
-        # for which to_mongo_object_id has clear rules.
-        return value
-
-
 def _normalize_filter_rec(filter_obj: Any) -> Any:
     """Recursively normalize a Mongo filter, converting any string `_id` occurrences
     (including in `$in`/`$nin`) to ObjectId and raising on invalid strings.
@@ -46,25 +30,30 @@ def _normalize_filter_rec(filter_obj: Any) -> Any:
     if not isinstance(filter_obj, Mapping):
         return filter_obj
 
+    # Cast to a properly parameterized Mapping so the type checker knows key is str
+    mapping = cast(Mapping[str, Any], filter_obj)
+
     normalized: dict[str, Any] = {}
-    for key, value in filter_obj.items():
+    for key, value in mapping.items():
         if key == "_id":
             # Direct match on _id
             if isinstance(value, list):
-                normalized[key] = [to_mongo_object_id(v) for v in value]
+                # Value may be an untyped list; cast to list[Any] so the element type is known
+                normalized[key] = [to_mongo_object_id(v) for v in cast(list[Any], value)]
             elif isinstance(value, Mapping):
                 # Operators on _id
                 sub: dict[str, Any] = {}
-                for op, op_val in value.items():
+                sub_mapping = cast(Mapping[str, Any], value)
+                for op, op_val in sub_mapping.items():
                     if op in ("$in", "$nin") and isinstance(op_val, list):
-                        sub[op] = [to_mongo_object_id(v) for v in op_val]
+                        sub[op] = [to_mongo_object_id(v) for v in cast(list[Any], op_val)]
                     else:
                         sub[op] = _normalize_filter_rec(op_val)
                 normalized[key] = sub
             else:
                 normalized[key] = to_mongo_object_id(value)
         elif key in ("$and", "$or", "$nor") and isinstance(value, list):
-            normalized[key] = [_normalize_filter_rec(v) for v in value]
+            normalized[key] = [_normalize_filter_rec(v) for v in cast(list[Any], value)]
         else:
             normalized[key] = _normalize_filter_rec(value) if isinstance(value, Mapping) else value
     return normalized

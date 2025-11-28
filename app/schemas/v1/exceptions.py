@@ -10,6 +10,20 @@ class BadRequestException(HTTPException):
         super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
+class UnauthorizedException(HTTPException):
+    """401 Exception raised for unauthorized access."""
+
+    def __init__(self, detail: str = "Unauthorized"):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
+
+class ForbiddenException(HTTPException):
+    """403 Exception raised for forbidden access."""
+
+    def __init__(self, detail: str = "Forbidden"):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
 class NotFoundException(HTTPException):
     """404 Exception raised when a todo item is not found."""
 

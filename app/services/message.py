@@ -2,10 +2,10 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.core.time import utc_now
 from app.repositories.message import MessageRepository
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.message import Message, MessageCreate
+from app.util.time import utc_now
 
 
 class MessageService:

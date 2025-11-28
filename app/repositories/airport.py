@@ -4,7 +4,7 @@ from bson import ObjectId
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_db
+from app.db.mongo_client import AsyncDB, get_db
 from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import MongoId
 

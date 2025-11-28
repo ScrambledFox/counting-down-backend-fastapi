@@ -12,6 +12,8 @@ dependencies = [
   "motor>=3.7.1",
   "pytest-cov>=7.0.0",
   "pytest-asyncio>=1.2.0",
+  "boto3>=1.41.3",
+  "types-boto3[s3]>=1.41.3",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -36,20 +38,8 @@ build-backend = "hatchling.build"
 line-length = 100
 target-version = "py314"
 exclude = ["*.pyi"]
-
-[tool.ruff.lint]
-extend-select = [
-  "E",  # pycodestyle errors
-  "F",  # pyflakes errors
-  "I",  # import-related rules
-  "UP", # pyupgrade rules
-  "B",  # flake-8 bugbear rules
-]
-ignore = [
-  "E203", # whitespace before ':'
-  "B008",
-]
-exclude = ["*.pyi"]
+lint.select = ["E", "F", "I", "UP", "B"]
+lint.ignore = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"

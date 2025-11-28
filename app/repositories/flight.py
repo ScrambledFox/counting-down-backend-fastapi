@@ -3,9 +3,10 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_db
-from app.models.db import Query
+from app.core.logging import get_logger
+from app.db.mongo_client import AsyncDB, get_db
 from app.models.flight import Flight
+from app.models.mongo import Query
 from app.schemas.v1.airport import Airport
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.flight import FlightStatus
@@ -14,6 +15,25 @@ from app.schemas.v1.flight import FlightStatus
 class FlightRepository:
     def __init__(self, db: Annotated[AsyncDB, Depends(get_db)]) -> None:
         self._flights = db[settings.flights_collection_name]
+        self._logger = get_logger(__name__)
+
+    async def _get_flights_by_airport(
+        self,
+        field: str,
+        airport_id: MongoId | None,
+        status: FlightStatus | None,
+        sort_field: str,
+    ) -> list[Flight]:
+        if airport_id is None:
+            return []
+
+        query: Query = {field: airport_id}
+        if status is not None:
+            query["status"] = status
+
+        cursor = self._flights.find(query).sort(sort_field, -1)
+        docs = await cursor.to_list(length=None)
+        return [Flight.model_validate(doc) for doc in docs]
 
     async def list_flights(self) -> list[Flight]:
         cursor = self._flights.find().sort("departure_at", -1)
@@ -59,21 +79,19 @@ class FlightRepository:
     async def get_flights_by_departure_airport(
         self, airport: Airport, status: FlightStatus | None = None
     ) -> list[Flight]:
-        query: Query = {"departure_airport_icao": airport.icao}
-        if status is not None:
-            query["status"] = status
-
-        cursor = self._flights.find(query).sort("departure_at", -1)
-        docs = await cursor.to_list(length=None)
-        return [Flight.model_validate(doc) for doc in docs]
+        return await self._get_flights_by_airport(
+            field="departure_airport_id",
+            airport_id=airport.id,
+            status=status,
+            sort_field="departure_at",
+        )
 
     async def get_flights_by_arrival_airport(
         self, airport: Airport, status: FlightStatus | None = None
     ) -> list[Flight]:
-        query: Query = {"arrival_airport_icao": airport.icao}
-        if status is not None:
-            query["status"] = status
-
-        cursor = self._flights.find(query).sort("arrival_at", -1)
-        docs = await cursor.to_list(length=None)
-        return [Flight.model_validate(doc) for doc in docs]
+        return await self._get_flights_by_airport(
+            field="arrival_airport_id",
+            airport_id=airport.id,
+            status=status,
+            sort_field="arrival_at",
+        )

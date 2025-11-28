@@ -8,7 +8,7 @@ import pytest_asyncio
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_test_db
+from app.db.mongo_client import AsyncDB, get_test_db
 from app.repositories.todo import TodoRepository
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
@@ -31,7 +31,7 @@ def todo_service_mock(todo_repository_mock: TodoRepository):
 @pytest_asyncio.fixture
 async def test_db() -> AsyncGenerator[AsyncDB]:
     """Real database connection for integration tests."""
-    db = await get_test_db()
+    db = get_test_db()
     collection = db[settings.todos_collection_name]
     # Clean up before test
     await collection.delete_many({})

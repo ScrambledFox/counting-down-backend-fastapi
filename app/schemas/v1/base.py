@@ -11,7 +11,7 @@ from pydantic import (
     WithJsonSchema,
 )
 
-from app.models.db import Document
+from app.models.mongo import Document
 
 
 def datetime_to_utc_str(dt: datetime) -> str:

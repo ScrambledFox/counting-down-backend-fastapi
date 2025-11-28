@@ -4,20 +4,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from app.api.v1 import router as v1_api_router
 from app.api.v1.error_handlers import register_exception_handlers
-from app.api.v1.routes import router as v1_api_router
 from app.core.config import settings
-from app.db.client import close_db_client, get_db_client
+from app.core.logging import get_logger, setup_logging
 from app.schemas.v1.health import HealthResponse
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger = setup_logging()
+    logger.info("Application startup")
     # -- Startup code can go here
-    await get_db_client()
-    yield
-    # -- Shutdown code can go here
-    await close_db_client()
+    try:
+        yield
+    finally:
+        logger.info("Application shutdown")
 
 
 app = FastAPI(title="CountingDown API", version="0.1.0", lifespan=lifespan)
@@ -45,4 +47,6 @@ app.include_router(v1_api_router, prefix="/api/v1")
 
 @app.get("/health", tags=["meta"], response_model=HealthResponse)
 def health() -> HealthResponse:
+    logger = get_logger("health")
+    logger.debug("Health check endpoint called")
     return HealthResponse(status="ok")

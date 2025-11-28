@@ -2,10 +2,10 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.core.time import utc_now
 from app.repositories.airport import AirportRepository
 from app.schemas.v1.airport import Airport, AirportCode, AirportCreate
 from app.schemas.v1.base import MongoId
+from app.util.time import utc_now
 
 
 class AirportService:

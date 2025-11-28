@@ -16,6 +16,20 @@ class Settings(BaseSettings):
     messages_collection_name: str = "messages"
     flights_collection_name: str = "flights"
     airports_collection_name: str = "airports"
+    advent_collection_name: str = "advents"
+    sessions_collection_name: str = "sessions"
+
+    aws_s3_advent_image_folder: str = "advent_images/"
+
+    access_key_danfeng: str = "danfeng_secret_key"
+    access_key_joris: str = "joris_secret_key"
+    session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
+
+    aws_region: str = "eu-west-1"
+    aws_s3_bucket: str = "my-app-bucket"
+
+    aws_access_key: str | None = None
+    aws_secret_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True)
 

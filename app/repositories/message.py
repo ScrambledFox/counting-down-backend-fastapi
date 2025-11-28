@@ -5,7 +5,8 @@ from bson import ObjectId
 from fastapi import Depends
 
 from app.core.config import settings
-from app.db.client import AsyncDB, get_db
+from app.db.mongo_client import get_db
+from app.models.mongo import AsyncDB
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.message import Message
 
