@@ -2,6 +2,7 @@ from typing import Annotated
 
 from bson import ObjectId
 from fastapi import Depends
+from pymongo import ASCENDING
 
 from app.core.config import settings
 from app.db.mongo_client import get_db
@@ -16,7 +17,9 @@ class AdventRepository:
         self._collection = db[settings.advent_collection_name]
 
     async def get_advents_uploaded_by(self, user_type: UserType) -> list[Advent]:
-        cursor = self._collection.find({"uploaded_by": user_type}).sort(["day", "uploaded_at"], 1)
+        cursor = self._collection.find({"uploaded_by": user_type}).sort(
+            [("day", ASCENDING), ("uploaded_at", ASCENDING)]
+        )
         docs = await cursor.to_list(length=None)
         return [Advent.model_validate(doc) for doc in docs]
 
@@ -26,7 +29,7 @@ class AdventRepository:
 
     async def get_advents_day_uploaded_by(self, day: int, user_type: UserType) -> list[Advent]:
         cursor = self._collection.find({"day": day, "uploaded_by": user_type}).sort(
-            ["day", "uploaded_at"], 1
+            [("day", ASCENDING), ("uploaded_at", ASCENDING)]
         )
         docs = await cursor.to_list(length=None)
         return [Advent.model_validate(doc) for doc in docs]
