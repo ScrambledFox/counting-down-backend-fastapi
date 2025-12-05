@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.config import settings
-from app.core.logging import get_logger
 from app.db.mongo_client import AsyncDB, get_db
 from app.models.flight import Flight
 from app.models.mongo import Query
@@ -15,7 +14,6 @@ from app.schemas.v1.flight import FlightStatus
 class FlightRepository:
     def __init__(self, db: Annotated[AsyncDB, Depends(get_db)]) -> None:
         self._flights = db[settings.flights_collection_name]
-        self._logger = get_logger(__name__)
 
     async def _get_flights_by_airport(
         self,

@@ -74,7 +74,7 @@ class Boto3S3Storage(S3Storage):
         except ClientError as exc:
             error_code = exc.response.get("Error", {}).get("Code")
             if error_code == "NoSuchKey":
-                self._logger.info(
+                self._logger.warning(
                     "S3 object not found",
                     extra={"bucket": bucket, "key": key},
                 )
