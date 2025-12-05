@@ -1,13 +1,16 @@
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 def create_thumbnail(image_data: bytes, size: int) -> bytes:
     with Image.open(BytesIO(image_data)) as img:
-        img.thumbnail((size, size))
+        img_format = img.format or "JPEG"
+        # Normalize orientation using EXIF data if present to avoid unexpected rotations
+        normalized = ImageOps.exif_transpose(img)
+        normalized.thumbnail((size, size))
         output = BytesIO()
-        img.save(output, format=img.format)
+        normalized.save(output, format=img_format)
         return output.getvalue()
 
 
