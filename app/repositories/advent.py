@@ -16,7 +16,7 @@ class AdventRepository:
         self._collection = db[settings.advent_collection_name]
 
     async def get_advents_uploaded_by(self, user_type: UserType) -> list[Advent]:
-        cursor = self._collection.find({"uploaded_by": user_type}).sort("day", 1)
+        cursor = self._collection.find({"uploaded_by": user_type}).sort(["day", "uploaded_at"], 1)
         docs = await cursor.to_list(length=None)
         return [Advent.model_validate(doc) for doc in docs]
 
@@ -25,7 +25,9 @@ class AdventRepository:
         return Advent.model_validate(doc) if doc else None
 
     async def get_advents_day_uploaded_by(self, day: int, user_type: UserType) -> list[Advent]:
-        cursor = self._collection.find({"day": day, "uploaded_by": user_type}).sort("day", 1)
+        cursor = self._collection.find({"day": day, "uploaded_by": user_type}).sort(
+            ["day", "uploaded_at"], 1
+        )
         docs = await cursor.to_list(length=None)
         return [Advent.model_validate(doc) for doc in docs]
 
