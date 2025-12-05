@@ -79,9 +79,7 @@ class Boto3S3Storage(S3Storage):
                     extra={"bucket": bucket, "key": key},
                 )
                 return None
-            self._logger.exception(
-                "S3 get_object failed", extra={"bucket": bucket, "key": key}
-            )
+            self._logger.exception("S3 get_object failed", extra={"bucket": bucket, "key": key})
             raise
 
         self._logger.debug(
