@@ -60,7 +60,7 @@ class Boto3S3Storage(S3Storage):
             self._logger.exception("S3 upload failed", extra={"bucket": bucket, "key": key})
             raise
 
-    async def get_object(self, *, bucket: str, key: str) -> bytes:
+    async def get_object(self, *, bucket: str, key: str) -> bytes | None:
         self._logger.debug("Getting bytes from S3", extra={"bucket": bucket, "key": key})
 
         def _get() -> bytes:
@@ -71,14 +71,24 @@ class Boto3S3Storage(S3Storage):
 
         try:
             data = await run_in_threadpool(_get)
-            self._logger.debug(
-                "Got bytes from S3",
-                extra={"bucket": bucket, "key": key, "length": len(data)},
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code")
+            if error_code == "NoSuchKey":
+                self._logger.info(
+                    "S3 object not found",
+                    extra={"bucket": bucket, "key": key},
+                )
+                return None
+            self._logger.exception(
+                "S3 get_object failed", extra={"bucket": bucket, "key": key}
             )
-            return data
-        except ClientError:
-            self._logger.exception("S3 get_object failed", extra={"bucket": bucket, "key": key})
             raise
+
+        self._logger.debug(
+            "Got bytes from S3",
+            extra={"bucket": bucket, "key": key, "length": len(data)},
+        )
+        return data
 
     async def delete_object(self, *, bucket: str, key: str) -> None:
         self._logger.debug("Deleting S3 object", extra={"bucket": bucket, "key": key})

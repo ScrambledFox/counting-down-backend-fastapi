@@ -2,13 +2,17 @@ from typing import Annotated
 
 from fastapi import Depends, UploadFile
 
+from app.core.config import Settings
 from app.repositories.advent import AdventRepository
 from app.repositories.image import ImageRepository
 from app.schemas.v1.advent import Advent, AdventRefCreate
-from app.schemas.v1.exceptions import NotFoundException
+from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.user import UserType
 from app.util.crypto import generate_crypto_id
+from app.util.image import create_thumbnail
 from app.util.time import utc_now
+
+settings = Settings()
 
 
 class AdventService:
@@ -33,10 +37,19 @@ class AdventService:
         # Generate unique image key
         image_key = generate_crypto_id()
 
+        # Read the upload once so downstream consumers see the full payload
+        image_data = await image.read()
+        if not image_data:
+            raise BadRequestException("Uploaded image is empty")
+
         # Save Image to storage
         await self._image_repo.upload_advent_image(
-            image_key, await image.read(), image.content_type
+            image_key, image_data, image.content_type
         )
+
+        # Create and save thumbnail
+        thumbnail_data = create_thumbnail(image_data, settings.thumbnail_size)
+        await self._image_repo.upload_thumbnail_image(image_key, thumbnail_data, image.content_type)
 
         # Create Advent entry
         new_advent = Advent(
@@ -54,8 +67,9 @@ class AdventService:
         if advent_ref is None:
             raise NotFoundException("Advent ref not found")
 
-        # Delete image from storage - (Optional, depending on whether you want to keep images)
-        # await self._image_repo.delete_image(advent_ref.image_key)
+        # Delete image from storage - (Don't delete images for now)
+        # await self._image_repo.delete_advent_image(advent_ref.image_key)
+        # await self._image_repo.delete_thumbnail_image(advent_ref.image_key)
 
         # Delete advent entry
         await self._advent_repo.delete_advent_by_id(advent_id)

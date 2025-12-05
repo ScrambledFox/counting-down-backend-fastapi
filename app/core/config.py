@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     sessions_collection_name: str = "sessions"
 
     aws_s3_advent_image_folder: str = "advent_images/"
+    aws_s3_thumbnail_folder: str = "advent_thumbnails/"
+    thumbnail_size: tuple[int, int] = (128, 128)
 
     access_key_danfeng: str = "danfeng_secret_key"
     access_key_joris: str = "joris_secret_key"
