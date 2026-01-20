@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, status
+from fastapi import Depends, Query, status
 
 from app.api.routing import make_router
 from app.schemas.v1.base import MongoId
@@ -20,7 +20,9 @@ async def get_todo_items(service: TodoServiceDep) -> list[Todo]:
 
 
 @router.get("/{item_id}", summary="Get Todo Item", response_model=Todo)
-async def get_todo_item(item_id: MongoId, service: TodoServiceDep) -> Todo:
+async def get_todo_item(
+    item_id: MongoId, service: TodoServiceDep, category_filter: str = Query(None)
+) -> Todo:
     item = await service.get_by_id(item_id)
     if not item:
         raise NotFoundException("Todo", item_id)
