@@ -35,5 +35,5 @@ class Advent(AdventBase):
     uploaded_at: datetime
 
 
-class AdventRefCreate(AdventBase):
+class AdventCreate(AdventBase):
     pass

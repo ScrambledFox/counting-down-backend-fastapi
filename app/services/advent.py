@@ -5,7 +5,7 @@ from fastapi import Depends, UploadFile
 from app.core.config import Settings
 from app.repositories.advent import AdventRepository
 from app.repositories.image import ImageRepository
-from app.schemas.v1.advent import Advent, AdventRefCreate
+from app.schemas.v1.advent import Advent, AdventCreate
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
 from app.schemas.v1.user import UserType
 from app.util.crypto import generate_crypto_id
@@ -33,7 +33,7 @@ class AdventService:
     async def get_advent_by_id(self, advent_id: str) -> Advent | None:
         return await self._advent_repo.get_advent_by_id(advent_id)
 
-    async def create_advent(self, advent_create: AdventRefCreate, image: UploadFile) -> Advent:
+    async def create_advent(self, advent_create: AdventCreate, image: UploadFile) -> Advent:
         # Generate unique image key
         image_key = generate_crypto_id()
 

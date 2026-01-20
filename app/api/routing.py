@@ -13,6 +13,6 @@ class NoAliasAPIRoute(APIRoute):
         super().__init__(*args, **kwargs)
 
 
-def make_router() -> APIRouter:
+def make_router(prefix: str = "") -> APIRouter:
     """APIRouter Factory with NoAliasAPIRoute as the route class."""
-    return APIRouter(route_class=NoAliasAPIRoute)
+    return APIRouter(route_class=NoAliasAPIRoute, prefix=prefix)

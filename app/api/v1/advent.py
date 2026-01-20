@@ -4,7 +4,7 @@ from fastapi import Depends, File, Form, UploadFile
 
 from app.api.routing import make_router
 from app.core.auth import require_session
-from app.schemas.v1.advent import Advent, AdventRefCreate, AdventType
+from app.schemas.v1.advent import Advent, AdventCreate, AdventType
 from app.schemas.v1.session import SessionResponse
 from app.services.advent import AdventService
 from app.util.time import utc_now
@@ -66,7 +66,7 @@ async def create_advent_item(
     image: UploadFile = File(...),
     session: SessionResponse = Depends(require_session),
 ) -> Advent:
-    advent = AdventRefCreate(
+    advent = AdventCreate(
         day=day, uploaded_by=session.user_type, title=title, description=description, type=type
     )
     return await advent_service.create_advent(advent, image)

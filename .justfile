@@ -1,3 +1,5 @@
+set windows-shell := ["C:\\Program Files\\Git\\bin\\sh.exe","-c"]
+
 dev:
     uv run fastapi dev app/main.py --reload --host 0.0.0.0 --port 8000
 

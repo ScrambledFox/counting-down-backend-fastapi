@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Application shutdown")
 
 
-app = FastAPI(title="CountingDown API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="CountingDown API", version="0.2.0", lifespan=lifespan, prefix="/api")
 
 if settings.frontend_urls and len(settings.frontend_urls) > 0:
     origins: list[str] = list(dict.fromkeys(settings.frontend_urls))
@@ -42,7 +42,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 
-app.include_router(v1_api_router, prefix="/api/v1")
+app.include_router(v1_api_router)
 
 
 @app.get("/health", tags=["meta"], response_model=HealthResponse)
