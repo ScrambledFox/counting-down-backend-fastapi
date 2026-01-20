@@ -26,9 +26,7 @@ class TodoRepository:
         return [Todo.model_validate(doc) for doc in docs]
 
     async def get_todo(self, todo_id: MongoId) -> Todo | None:
-        doc = await self._collection.find_one(
-            {"_id": ObjectId(todo_id), "deleted_at": {"$exists": False}}
-        )
+        doc = await self._collection.find_one({"_id": ObjectId(todo_id)})
         return Todo.model_validate(doc) if doc else None
 
     async def create_todo(self, todo: Todo) -> Todo:
