@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Annotated, Any
+from datetime import UTC, datetime
+from typing import Annotated, Any, cast
 from zoneinfo import ZoneInfo
 
 from bson import ObjectId
@@ -9,6 +9,7 @@ from pydantic import (
     BeforeValidator,
     Field,
     WithJsonSchema,
+    model_validator,
 )
 
 from app.models.mongo import Document
@@ -70,3 +71,24 @@ class CustomModel(BaseModel):
 
     def serialize(self) -> Document:
         return self.model_dump(mode="json", by_alias=True, exclude_none=True)
+    
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_datetimes(cls, data: Any) -> Any:
+        def fix(v: Any) -> Any:
+            if isinstance(v, datetime):
+                if v.tzinfo is None:
+                    return v.replace(tzinfo=UTC)
+                return v.astimezone(UTC)
+
+            if isinstance(v, list):
+                items = cast(list[Any], v)
+                return [fix(x) for x in items]
+
+            if isinstance(v, dict):
+                d = cast(dict[str, Any], v)  # Pydantic input dicts are typically str-keyed
+                return {k: fix(x) for k, x in d.items()}
+
+            return v
+
+        return fix(data)
