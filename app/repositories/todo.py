@@ -15,13 +15,20 @@ class TodoRepository:
     def __init__(self, db: Annotated[AsyncDB, Depends(get_db)]) -> None:
         self._collection = db[settings.todos_collection_name]
 
-    async def list_todos(self) -> list[Todo]:
-        cursor = self._collection.find().sort("created_at", -1)
-        docs = await cursor.to_list(length=None)
+    async def list_todos(self, *, category_filter: list[str] | None = None) -> list[Todo]:
+        cursor = self._collection.find(
+            {
+                "category": {"$in": category_filter} if category_filter else {"$exists": True},
+                "deleted_at": {"$exists": False},
+            }
+        )
+        docs = await cursor.sort("created_at", -1).to_list(length=None)
         return [Todo.model_validate(doc) for doc in docs]
 
     async def get_todo(self, todo_id: MongoId) -> Todo | None:
-        doc = await self._collection.find_one({"_id": ObjectId(todo_id)})
+        doc = await self._collection.find_one(
+            {"_id": ObjectId(todo_id), "deleted_at": {"$exists": False}}
+        )
         return Todo.model_validate(doc) if doc else None
 
     async def create_todo(self, todo: Todo) -> Todo:
@@ -45,7 +52,7 @@ class TodoRepository:
 
     async def toggle_todo(self, todo_id: MongoId) -> Todo | None:
         updated_doc = await self._collection.find_one_and_update(
-            {"_id": ObjectId(todo_id)},
+            {"_id": ObjectId(todo_id), "deleted_at": {"$exists": False}},
             [{"$set": {"completed": {"$not": "$completed"}}}],
             return_document=True,
         )

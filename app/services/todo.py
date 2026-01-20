@@ -14,8 +14,8 @@ class TodoService:
     def __init__(self, repo: Annotated[TodoRepository, Depends()]) -> None:
         self._repo = repo
 
-    async def get_all(self) -> list[Todo]:
-        return await self._repo.list_todos()
+    async def get_all(self, *, category_filter: list[str] | None = None) -> list[Todo]:
+        return await self._repo.list_todos(category_filter=category_filter)
 
     async def get_by_id(self, item_id: MongoId) -> Todo | None:
         return await self._repo.get_todo(item_id)

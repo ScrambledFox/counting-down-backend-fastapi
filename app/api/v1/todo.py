@@ -15,13 +15,17 @@ TodoServiceDep = Annotated[TodoService, Depends()]
 
 
 @router.get("/", summary="Get Todo Items", response_model=list[Todo])
-async def get_todo_items(service: TodoServiceDep) -> list[Todo]:
-    return await service.get_all()
+async def get_todo_items(
+    service: TodoServiceDep,
+    category_filter: list[str] | None = Query(default=None, description="Filter by categories"),
+) -> list[Todo]:
+    return await service.get_all(category_filter=category_filter)
 
 
 @router.get("/{item_id}", summary="Get Todo Item", response_model=Todo)
 async def get_todo_item(
-    item_id: MongoId, service: TodoServiceDep, category_filter: str = Query(None)
+    item_id: MongoId,
+    service: TodoServiceDep,
 ) -> Todo:
     item = await service.get_by_id(item_id)
     if not item:
