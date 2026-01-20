@@ -39,6 +39,7 @@ class FlightService:
         return [await self._to_schema(f) for f in flights]
 
     async def get_all_flights(self) -> list[FlightSchema]:
+        await self.check_flights_for_expiration()
         flights = await self._flights.list_flights()
         return await self._map_list_to_schema(flights)
 
@@ -71,12 +72,14 @@ class FlightService:
         return await self._to_schema(created_flight)
 
     async def get_flight_by_id(self, flight_id: MongoId) -> FlightSchema | None:
+        await self.check_flights_for_expiration()
         flight = await self._flights.get_flight(flight_id)
         if flight is None:
             return None
         return await self._to_schema(flight)
 
     async def get_flight_by_flight_number(self, flight_number: str) -> FlightSchema | None:
+        await self.check_flights_for_expiration()
         flights = await self._flights.list_flights()
         for flight in flights:
             if flight.flight_number == flight_number:
@@ -84,6 +87,7 @@ class FlightService:
         return None
 
     async def get_next_flight(self) -> FlightSchema | None:
+        await self.check_flights_for_expiration()
         flight = await self._flights.get_most_recent_active_flight()
         if flight is None:
             return None
@@ -123,23 +127,37 @@ class FlightService:
         return await self._flights.delete_flight_by_code(flight_code)
 
     async def get_active_flights(self) -> list[FlightSchema]:
+        await self.check_flights_for_expiration()
         flights = await self._flights.list_active_flights()
         return await self._map_list_to_schema(flights)
 
     async def get_most_recent_active_flight(self) -> FlightSchema | None:
+        await self.check_flights_for_expiration()
         flight = await self._flights.get_most_recent_active_flight()
         if flight is None:
             return None
         return await self._to_schema(flight)
 
     async def get_flights_by_arrival_airport(self, airport: Airport) -> list[FlightSchema]:
+        await self.check_flights_for_expiration()
         flights = await self._flights.get_flights_by_arrival_airport(
             airport, status=FlightStatus.ACTIVE
         )
         return await self._map_list_to_schema(flights)
 
     async def get_flights_by_departure_airport(self, airport: Airport) -> list[FlightSchema]:
+        await self.check_flights_for_expiration()
         flights = await self._flights.get_flights_by_departure_airport(
             airport, status=FlightStatus.ACTIVE
         )
         return await self._map_list_to_schema(flights)
+    
+    async def check_flights_for_expiration(self) -> None:
+        now = utc_now()
+        flights = await self._flights.list_active_flights()
+        for flight in flights:
+            if flight.arrival_at < now:
+                flight.status = FlightStatus.EXPIRED
+                await self._flights.update_flight(
+                    (str(flight.id)), flight
+                )

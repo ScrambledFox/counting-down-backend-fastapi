@@ -10,6 +10,7 @@ class FlightStatus(str, Enum):
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
 
 
 class Flight(CustomModel):
