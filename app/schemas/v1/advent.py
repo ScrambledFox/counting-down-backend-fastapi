@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import Field, field_validator
 
@@ -7,7 +7,7 @@ from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 from app.schemas.v1.user import UserType
 
 
-class AdventType(str, Enum):
+class AdventType(StrEnum):
     SPICY = "spicy"
     CUTE = "cute"
     FUNNY = "funny"
