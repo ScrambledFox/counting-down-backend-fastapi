@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import Depends, UploadFile
@@ -6,10 +7,18 @@ from app.core.config import get_settings
 from app.repositories.image import ImageRepository
 from app.repositories.image_metadata import ImageMetadataRepository
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
-from app.schemas.v1.image_metadata import ImageMetadata, ImageMetadataCreate
+from app.schemas.v1.image_metadata import (
+    ImageMetadata,
+    ImageMetadataCreate,
+)
 from app.schemas.v1.user import UserType
 from app.util.crypto import generate_crypto_id
-from app.util.image import create_thumbnail, get_thumbnail_name
+from app.util.image import (
+    create_thumbnail,
+    decode_image_cursor,
+    encode_image_cursor,
+    get_thumbnail_name,
+)
 from app.util.time import utc_now
 
 settings = get_settings()
@@ -24,11 +33,38 @@ class ImageService:
         self._images = image_repository
         self._metadata = metadata_repository
 
+    async def _create_thumbnail_for_image_key(self, key: str) -> None:
+        image = await self.get_image_bytes_by_key(key)
+        if image is None:
+            raise NotFoundException("Image", key)
+
+        thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
+        await self._images.upload_thumbnail_image(
+            get_thumbnail_name(key, settings.thumbnail_size),
+            thumbnail,
+            f"image/{img_format.lower()}",
+        )
+
     async def get_image_bytes_by_key(self, key: str) -> bytes | None:
         return await self._images.get_advent_image(key)
 
     async def list_images_by_uploader(self, uploader: UserType) -> list[ImageMetadata]:
         return await self._metadata.get_by_user_type(uploader)
+
+    async def list_image_metadata_page(
+        self, limit: int, cursor: str | None, user_filter: UserType | None = None
+    ) -> tuple[list[ImageMetadata], str | None]:
+        decoded_cursor = decode_image_cursor(cursor) if cursor else None
+        docs = await self._metadata.list_image_metadata_page(limit + 1, decoded_cursor, user_filter)
+
+        has_more = len(docs) > limit
+        items = docs[:limit]
+        next_cursor = None
+        if has_more and items:
+            last_item = items[-1]
+            next_cursor = encode_image_cursor(last_item.uploaded_at, str(last_item.id))
+
+        return items, next_cursor
 
     async def get_image_by_id(self, image_id: str) -> ImageMetadata | None:
         return await self._metadata.get_image_metadata_by_id(image_id)
@@ -46,11 +82,8 @@ class ImageService:
         # Save Image to storage
         await self._images.upload_advent_image(IMAGE_KEY, image_data, image.content_type)
 
-        # Create and save thumbnail
-        THUMBNAIL_DATA, img_format = create_thumbnail(image_data, settings.thumbnail_size)
-        await self._images.upload_thumbnail_image(
-            IMAGE_KEY, THUMBNAIL_DATA, f"image/{img_format.lower()}"
-        )
+        #  Create thumbnail
+        asyncio.run(self._create_thumbnail_for_image_key(IMAGE_KEY))
 
         # Save metadata to DB
         new_metadata = ImageMetadata(
@@ -75,12 +108,7 @@ class ImageService:
         if image is None:
             raise NotFoundException("Image", key)
 
-        thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
-        await self._images.upload_thumbnail_image(
-            get_thumbnail_name(key, settings.thumbnail_size),
-            thumbnail,
-            f"image/{img_format.lower()}",
-        )
+        asyncio.run(self._create_thumbnail_for_image_key(key))
 
     async def delete_image_by_id(self, image_id: str) -> bool:
         metadata = await self.get_image_by_id(image_id)

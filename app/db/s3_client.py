@@ -59,11 +59,17 @@ class Boto3S3Storage(S3Storage):
         try:
             await run_in_threadpool(_upload)
         except ClientError:
-            self._logger.exception("S3 upload failed", extra={"bucket": bucket, "key": key})
+            self._logger.exception(
+                f"S3 upload failed for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
+            )
             raise
 
     async def get_object(self, *, bucket: str, key: str) -> bytes | None:
-        self._logger.debug("Getting bytes from S3", extra={"bucket": bucket, "key": key})
+        self._logger.debug(
+            f"Getting bytes from S3 for bucket: {bucket}, key: {key}",
+            extra={"bucket": bucket, "key": key},
+        )
 
         def _get() -> bytes:
             response = self._client.get_object(Bucket=bucket, Key=key)
@@ -81,17 +87,23 @@ class Boto3S3Storage(S3Storage):
                     extra={"bucket": bucket, "key": key},
                 )
                 return None
-            self._logger.exception("S3 get_object failed", extra={"bucket": bucket, "key": key})
+            self._logger.exception(
+                f"S3 get_object failed for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
+            )
             raise
 
         self._logger.debug(
-            "Got bytes from S3",
+            f"Got bytes from S3 for bucket: {bucket}, key: {key}, length: {len(data)}",
             extra={"bucket": bucket, "key": key, "length": len(data)},
         )
         return data
 
     async def delete_object(self, *, bucket: str, key: str) -> None:
-        self._logger.debug("Deleting S3 object", extra={"bucket": bucket, "key": key})
+        self._logger.debug(
+            f"Deleting S3 object for bucket: {bucket}, key: {key}",
+            extra={"bucket": bucket, "key": key},
+        )
 
         def _delete() -> None:
             self._client.delete_object(Bucket=bucket, Key=key)
@@ -99,7 +111,10 @@ class Boto3S3Storage(S3Storage):
         try:
             await run_in_threadpool(_delete)
         except ClientError:
-            self._logger.exception("S3 delete_object failed", extra={"bucket": bucket, "key": key})
+            self._logger.exception(
+                f"S3 delete_object failed for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
+            )
             raise
 
     async def generate_presigned_url(
@@ -110,8 +125,7 @@ class Boto3S3Storage(S3Storage):
         expires_in: int = 3600,
     ) -> str:
         self._logger.debug(
-            "Generating presigned URL",
-            extra={"bucket": bucket, "key": key, "expires_in": expires_in},
+            f"Generating presigned URL for bucket: {bucket}, key: {key}, expires_in: {expires_in}"
         )
 
         def _generate_url() -> str:
@@ -124,12 +138,15 @@ class Boto3S3Storage(S3Storage):
         try:
             url = await run_in_threadpool(_generate_url)
             self._logger.debug(
-                "Generated presigned URL",
+                f"Generated presigned URL for bucket: {bucket}, key: {key}, url: {url}",
                 extra={"bucket": bucket, "key": key, "url": url},
             )
             return url
         except ClientError:
-            self._logger.exception("S3 presign failed", extra={"bucket": bucket, "key": key})
+            self._logger.exception(
+                f"S3 presign failed for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
+            )
             raise
 
 

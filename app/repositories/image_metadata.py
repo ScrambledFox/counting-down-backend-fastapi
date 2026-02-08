@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from bson import ObjectId
 from fastapi import Depends
@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.db.mongo_client import get_db
 from app.models.mongo import AsyncDB
 from app.schemas.v1.base import MongoId
-from app.schemas.v1.image_metadata import ImageMetadata, ImageMetadataUpdate
+from app.schemas.v1.image_metadata import ImageCursorPayload, ImageMetadata, ImageMetadataUpdate
 from app.schemas.v1.user import UserType
 from app.util.time import utc_now
 
@@ -35,6 +35,38 @@ class ImageMetadataRepository:
     async def get_image_metadata_by_id(self, metadata_id: MongoId) -> ImageMetadata | None:
         doc = await self._collection.find_one({"_id": ObjectId(metadata_id), "deleted_at": None})
         return ImageMetadata.model_validate(doc) if doc else None
+
+    async def list_image_metadata_page(
+        self, limit: int, cursor: ImageCursorPayload | None, user_filter: UserType | None = None
+    ) -> list[ImageMetadata]:
+        # Index required for keyset pagination (created_at stored as uploaded_at):
+        # db.images.createIndex({ uploaded_at: -1, _id: -1 })
+        query: dict[str, Any] = {"deleted_at": None}
+
+        if user_filter is not None:
+            query["uploaded_by"] = user_filter
+
+        if cursor is not None:
+            query = {
+                "$and": [
+                    query,
+                    {
+                        "$or": [
+                            {"uploaded_at": {"$lt": cursor.created_at}},
+                            {
+                                "uploaded_at": cursor.created_at,
+                                "_id": {"$lt": ObjectId(cursor.id)},
+                            },
+                        ]
+                    },
+                ]
+            }
+
+        cursor_query = (
+            self._collection.find(query).sort([("uploaded_at", -1), ("_id", -1)]).limit(limit)
+        )
+        docs = await cursor_query.to_list(length=limit)
+        return [ImageMetadata.model_validate(doc) for doc in docs]
 
     async def update_image_metadata(
         self, metadata_id: MongoId, metadata_update: ImageMetadataUpdate

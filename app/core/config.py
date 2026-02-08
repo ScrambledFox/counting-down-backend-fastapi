@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     aws_access_key: str | None = None
     aws_secret_key: str | None = None
 
+    DEFAULT_PAGE_SIZE: int = 20
+    MAX_PAGE_SIZE: int = 100
+
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True, case_sensitive=False)
 
     @field_validator("frontend_urls", mode="before")

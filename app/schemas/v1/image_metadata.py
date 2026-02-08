@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.schemas.v1.base import DefaultMongoIdField
+from app.schemas.v1.base import DefaultMongoIdField, MongoId
 from app.schemas.v1.user import UserType
 from app.util.time import utc_now
 
@@ -39,3 +39,17 @@ class ImageMetadataCreate(ImageMetadataBase):
     """Model for creating image metadata."""
 
     pass
+
+
+class ImageCursorPayload(BaseModel):
+    """Cursor payload for keyset pagination."""
+
+    created_at: datetime
+    id: MongoId
+
+
+class ImagePageResponse(BaseModel):
+    """Response model for keyset pagination."""
+
+    items: list[ImageMetadata]
+    next_cursor: str | None = None

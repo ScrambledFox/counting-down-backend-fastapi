@@ -1,17 +1,23 @@
 from typing import Annotated
 
-from fastapi import Depends, File, Form, UploadFile
+from fastapi import Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.routing import make_router
 from app.core.auth import require_session
-from app.schemas.v1.exceptions import NotFoundException
-from app.schemas.v1.image_metadata import ImageMetadata, ImageMetadataCreate
+from app.core.config import get_settings
+from app.schemas.v1.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.image_metadata import (
+    ImageMetadataCreate,
+    ImagePageResponse,
+)
 from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.user import UserType
 from app.services.image import ImageService
 
 router = make_router(prefix="/images")
+
+settings = get_settings()
 
 ImageServiceDependency = Annotated[ImageService, Depends()]
 
@@ -35,20 +41,40 @@ def _parse_image_metadata_form(
 # ------------------------------------
 
 
-@router.get("/for_me", summary="Get Images for Me", dependencies=[Depends(require_session)])
+@router.get("", summary="List Images", dependencies=[Depends(require_session)])
+async def list_images(
+    img_service: ImageServiceDependency,
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    cursor: str | None = Query(None),
+) -> ImagePageResponse:
+    items, next_cursor = await img_service.list_image_metadata_page(limit=limit, cursor=cursor)
+    return ImagePageResponse(items=items, next_cursor=next_cursor)
+
+
+@router.get("/for_me", summary="List Images for Me", dependencies=[Depends(require_session)])
 async def get_images_for_me(
     img_service: ImageServiceDependency,
     user_info: Annotated[SessionResponse, Depends(require_session)],
-) -> list[ImageMetadata]:
-    return await img_service.list_images_by_uploader(user_info.get_other_user())
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    cursor: str | None = Query(None),
+) -> ImagePageResponse:
+    items, next_cursor = await img_service.list_image_metadata_page(
+        limit=limit, cursor=cursor, user_filter=user_info.get_other_user()
+    )
+    return ImagePageResponse(items=items, next_cursor=next_cursor)
 
 
-@router.get("/by_me", summary="Get Images by Me", dependencies=[Depends(require_session)])
+@router.get("/by_me", summary="List Images by Me", dependencies=[Depends(require_session)])
 async def get_images_by_me(
     img_service: ImageServiceDependency,
     user_info: Annotated[SessionResponse, Depends(require_session)],
-):
-    return await img_service.list_images_by_uploader(user_info.user_type)
+    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    cursor: str | None = Query(None),
+) -> ImagePageResponse:
+    items, next_cursor = await img_service.list_image_metadata_page(
+        limit=limit, cursor=cursor, user_filter=user_info.user_type
+    )
+    return ImagePageResponse(items=items, next_cursor=next_cursor)
 
 
 @router.get("/{id}/meta", summary="Get Image Metadata", dependencies=[Depends(require_session)])
@@ -76,7 +102,7 @@ async def create_image_metadata(
 # ------------------------------------
 
 
-@router.get("/{image_key}", summary="Get Image Item", dependencies=[Depends(require_session)])
+@router.get("/{image_key}", summary="Get Image Data Bytes", dependencies=[Depends(require_session)])
 async def get_image_item(
     image_key: str,
     service: ImageServiceDependency,
@@ -103,7 +129,7 @@ async def request_thumbnail_generation(
     service: ImageServiceDependency,
 ):
     if await service.get_thumbnail_bytes_by_key(image_key) is not None:
-        return {"message": "Thumbnail already exists"}
+        raise BadRequestException("Thumbnail already exists for this image")
     await service.request_thumbnail_generation(image_key)
     return {"message": "Thumbnail generation requested successfully"}
 
