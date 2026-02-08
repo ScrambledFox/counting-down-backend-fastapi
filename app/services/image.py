@@ -83,7 +83,7 @@ class ImageService:
         await self._images.upload_advent_image(IMAGE_KEY, image_data, image.content_type)
 
         #  Create thumbnail
-        asyncio.run(self._create_thumbnail_for_image_key(IMAGE_KEY))
+        asyncio.create_task(self._create_thumbnail_for_image_key(IMAGE_KEY))
 
         # Save metadata to DB
         new_metadata = ImageMetadata(
