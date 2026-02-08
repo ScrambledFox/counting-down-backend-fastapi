@@ -3,11 +3,14 @@ from typing import Annotated
 from fastapi import Depends, Security
 from fastapi.security import APIKeyHeader
 
+from app.core import logging
 from app.schemas.v1.exceptions import UnauthorizedException
 from app.schemas.v1.session import SessionResponse
 from app.services.auth import AuthService
 
-session_id_header = APIKeyHeader(name="X-Session-Id", auto_error=False)
+session_id_header = APIKeyHeader(name="X-Session-Id")
+
+logger = logging.get_logger(__name__)
 
 
 async def require_session(
@@ -29,4 +32,5 @@ async def require_session(
     try:
         return await auth_service.get_session_info(x_session_id)
     except Exception as e:
+        logger.warning(f"Unauthorized access attempt with session_id: {x_session_id}")
         raise UnauthorizedException("Invalid or expired session") from e

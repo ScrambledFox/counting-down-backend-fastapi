@@ -4,12 +4,14 @@ from bson import ObjectId
 from fastapi import Depends
 from pymongo import ASCENDING
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.mongo_client import get_db
 from app.models.mongo import AsyncDB
 from app.schemas.v1.advent import Advent
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.user import UserType
+
+settings = get_settings()
 
 
 class AdventRepository:

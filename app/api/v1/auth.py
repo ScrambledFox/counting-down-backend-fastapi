@@ -1,15 +1,13 @@
 from typing import Annotated, Any
 
-from fastapi import Depends
+from fastapi import Depends, Security
 
 from app.api.routing import make_router
-from app.core import logging
+from app.core.auth import require_session
 from app.schemas.v1.session import SessionResponse
 from app.services.auth import AuthService
 
 router = make_router()
-
-_logger = logging.get_logger(__name__)
 
 
 @router.post("/login", summary="Login User and Create Session")
@@ -31,7 +29,6 @@ async def logout_user(
 
 @router.get("/session", summary="Get Current Session Info")
 async def get_session_info(
-    session_id: str,
-    auth_service: Annotated[AuthService, Depends()],
+    session_info: Annotated[SessionResponse, Security(require_session)],
 ) -> SessionResponse:
-    return await auth_service.get_session_info(session_id)
+    return session_info

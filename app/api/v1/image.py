@@ -1,112 +1,124 @@
 from typing import Annotated
 
-from fastapi import Depends, File, UploadFile
+from fastapi import Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.routing import make_router
 from app.core.auth import require_session
-from app.schemas.v1.advent import Advent, AdventCreate
 from app.schemas.v1.exceptions import NotFoundException
+from app.schemas.v1.image_metadata import ImageMetadata, ImageMetadataCreate
 from app.schemas.v1.session import SessionResponse
-from app.services.advent import AdventService
+from app.schemas.v1.user import UserType
 from app.services.image import ImageService
-from app.util.user import get_other_user_type
 
-router = make_router()
+router = make_router(prefix="/images")
 
-ImageServiceDep = Annotated[ImageService, Depends()]
-AdventServiceDep = Annotated[AdventService, Depends()]
+ImageServiceDependency = Annotated[ImageService, Depends()]
 
 
-@router.get("/images/for_me", summary="Get Images for Me", dependencies=[Depends(require_session)])
+def _parse_image_metadata_form(
+    uploaded_by: Annotated[UserType, Form(...)],
+    title: Annotated[str, Form()] = "New Image",
+    description: Annotated[str, Form()] = "",
+    image_tags: Annotated[list[str] | None, Form()] = None,
+) -> ImageMetadataCreate:
+    return ImageMetadataCreate(
+        uploaded_by=uploaded_by,
+        title=title,
+        description=description,
+        image_tags=image_tags or [],
+    )
+
+
+# ------------------------------------
+# General Image Endpoints
+# ------------------------------------
+
+
+@router.get("/for_me", summary="Get Images for Me", dependencies=[Depends(require_session)])
 async def get_images_for_me(
-    advent: AdventServiceDep, user_info: Annotated[SessionResponse, Depends(require_session)]
-) -> list[Advent]:
-    advents = await advent.list_advents_uploaded_by(get_other_user_type(user_info.user_type))
-    return advents
+    img_service: ImageServiceDependency,
+    user_info: Annotated[SessionResponse, Depends(require_session)],
+) -> list[ImageMetadata]:
+    return await img_service.list_images_by_uploader(user_info.get_other_user())
 
 
-@router.get("/images/by_me", summary="Get Images by Me", dependencies=[Depends(require_session)])
+@router.get("/by_me", summary="Get Images by Me", dependencies=[Depends(require_session)])
 async def get_images_by_me(
-    advent: AdventServiceDep, user_info: Annotated[SessionResponse, Depends(require_session)]
+    img_service: ImageServiceDependency,
+    user_info: Annotated[SessionResponse, Depends(require_session)],
 ):
-    advents = await advent.list_advents_uploaded_by(user_info.user_type)
-    return advents
+    return await img_service.list_images_by_uploader(user_info.user_type)
 
 
-@router.get(
-    "/image-metadata/{id}", summary="Get Image Metadata", dependencies=[Depends(require_session)]
-)
+@router.get("/{id}/meta", summary="Get Image Metadata", dependencies=[Depends(require_session)])
 async def get_image_metadata(
     id: str,
-    advent: AdventServiceDep,
+    img_service: ImageServiceDependency,
 ):
-    metadata = await advent.get_advent_by_id(id)
+    metadata = await img_service.get_image_by_id(id)
     if metadata is None:
         raise NotFoundException("Image Metadata", id)
     return metadata
 
 
-@router.post("/image-metadata/", summary="Create Image Metadata")
+@router.post("/", summary="Create Image")
 async def create_image_metadata(
-    advent_data: AdventCreate,
-    advent: AdventServiceDep,
+    image_meta: Annotated[ImageMetadataCreate, Depends(_parse_image_metadata_form)],
+    img_service: ImageServiceDependency,
     image: UploadFile = File(...),
 ):
-    created_advent = await advent.create_advent(advent_data, image)
-    return created_advent
+    return await img_service.create_image(image_meta, image)
 
 
-@router.get("/images/{key}", summary="Get Image Item", dependencies=[Depends(require_session)])
+# ------------------------------------
+# Image Data Endpoints
+# ------------------------------------
+
+
+@router.get("/{image_key}", summary="Get Image Item", dependencies=[Depends(require_session)])
 async def get_image_item(
-    key: str,
-    service: ImageServiceDep,
+    image_key: str,
+    service: ImageServiceDependency,
 ) -> StreamingResponse:
-    data = await service.get_image_bytes_by_key(key)
+    data = await service.get_image_bytes_by_key(image_key)
     if data is None:
-        raise NotFoundException("Image", key)
+        raise NotFoundException("Image", image_key)
 
     return StreamingResponse(content=iter([data]), media_type="image/jpeg")
 
 
-@router.post("/images/{key}", summary="Upload Image Item")
-async def upload_image_item(
-    key: str,
-    service: ImageServiceDep,
-    file: UploadFile = File(...),
-):
-    content_type = file.content_type
-    data = await file.read()
-    await service.upload_image_bytes(key, data, content_type)
-    return {"message": "Image uploaded successfully"}
+# ------------------------------------
+# Thumbnail Endpoints
+# ------------------------------------
 
 
 @router.post(
-    "/image-thumbnails/{key}",
+    "/{image_key}/thumbnail",
     summary="Request Thumbnail Generation",
     dependencies=[Depends(require_session)],
 )
 async def request_thumbnail_generation(
-    key: str,
-    service: ImageServiceDep,
+    image_key: str,
+    service: ImageServiceDependency,
 ):
-    if await service.get_thumbnail_bytes_by_key(key) is not None:
+    if await service.get_thumbnail_bytes_by_key(image_key) is not None:
         return {"message": "Thumbnail already exists"}
-    await service.request_thumbnail_generation(key)
+    await service.request_thumbnail_generation(image_key)
     return {"message": "Thumbnail generation requested successfully"}
 
 
 @router.get(
-    "/image-thumbnails/{key}",
+    "/{image_key}/thumbnail",
     summary="Get Thumbnail Image",
     dependencies=[Depends(require_session)],
 )
 async def get_thumbnail_image(
-    key: str,
-    service: ImageServiceDep,
+    image_key: str,
+    service: ImageServiceDependency,
 ) -> StreamingResponse:
-    data = await service.get_thumbnail_bytes_by_key(key)
+    data = await service.get_thumbnail_bytes_by_key(image_key)
     if data is None:
-        raise NotFoundException("Thumbnail Image", key)
+        raise NotFoundException("Thumbnail Image", image_key)
 
     return StreamingResponse(content=iter([data]), media_type="image/jpeg")

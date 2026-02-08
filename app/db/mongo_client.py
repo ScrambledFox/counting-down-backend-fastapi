@@ -2,9 +2,11 @@ from functools import lru_cache
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.interfaces.mongo import MongoDBClient
 from app.models.mongo import AsyncClient, AsyncDB
+
+settings = get_settings()
 
 
 class MotorMongoDBClient:

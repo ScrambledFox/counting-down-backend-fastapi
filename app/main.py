@@ -6,9 +6,11 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as v1_api_router
 from app.api.v1.error_handlers import register_exception_handlers
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.schemas.v1.health import HealthResponse
+
+settings = get_settings()
 
 
 @asynccontextmanager

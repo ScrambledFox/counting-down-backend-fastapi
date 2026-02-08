@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core import logging
-from app.core.config import settings
+from app.core.config import get_settings
 from app.repositories.session import SessionRepository
 from app.schemas.v1.exceptions import ForbiddenException, NotFoundException
 from app.schemas.v1.session import Session, SessionResponse
@@ -12,6 +12,8 @@ from app.schemas.v1.user import UserType
 from app.services.user import UserService
 from app.util.crypto import generate_session_id
 from app.util.time import utc_now
+
+settings = get_settings()
 
 
 class AuthService:

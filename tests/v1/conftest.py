@@ -7,11 +7,13 @@ import pytest
 import pytest_asyncio
 from fastapi import Depends
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.mongo_client import AsyncDB, get_test_db
 from app.repositories.todo import TodoRepository
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
 from app.services.todo import TodoService
+
+settings = get_settings()
 
 
 # Unit test fixtures (with mocks)

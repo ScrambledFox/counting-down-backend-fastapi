@@ -2,9 +2,11 @@ import logging
 import sys
 from typing import Final
 
-from app.core.config import settings
+from app.core.config import get_settings
 
 LOG_NAME: Final = "counting_down"
+
+settings = get_settings()
 
 
 def _get_level_from_env() -> int:

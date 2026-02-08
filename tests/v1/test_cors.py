@@ -1,7 +1,9 @@
 from starlette.testclient import TestClient
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.main import app
+
+settings = get_settings()
 
 
 def test_first_configured_origin_allowed():

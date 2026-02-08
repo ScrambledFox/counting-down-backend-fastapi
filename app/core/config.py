@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,9 +20,10 @@ class Settings(BaseSettings):
     airports_collection_name: str = "airports"
     advent_collection_name: str = "advents"
     sessions_collection_name: str = "sessions"
+    image_metadata_collection_name: str = "images"
 
-    aws_s3_advent_image_folder: str = "advent_images/"
-    aws_s3_thumbnail_folder: str = "advent_thumbnails/"
+    aws_s3_image_folder: str = "images/"
+    aws_s3_thumbnail_folder: str = "thumbnails/"
     thumbnail_size: int = 128
 
     access_key_danfeng: str = "danfeng_secret_key"
@@ -33,7 +36,7 @@ class Settings(BaseSettings):
     aws_access_key: str | None = None
     aws_secret_key: str | None = None
 
-    model_config = SettingsConfigDict(env_file=".env", populate_by_name=True)
+    model_config = SettingsConfigDict(env_file=".env", populate_by_name=True, case_sensitive=False)
 
     @field_validator("frontend_urls", mode="before")
     @classmethod
@@ -51,4 +54,6 @@ class Settings(BaseSettings):
         return v
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

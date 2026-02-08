@@ -1,8 +1,10 @@
 from fastapi import Depends
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.s3_client import get_s3_storage
 from app.models.s3 import S3Storage
+
+settings = get_settings()
 
 
 class ImageRepository:
@@ -11,7 +13,7 @@ class ImageRepository:
         self._bucket = settings.aws_s3_bucket
 
     def _advent_prefix(self) -> str:
-        prefix = settings.aws_s3_advent_image_folder
+        prefix = settings.aws_s3_image_folder
         if not prefix:
             return ""
         if not prefix.endswith("/"):

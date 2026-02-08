@@ -9,9 +9,11 @@ from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 from types_boto3_s3 import S3Client
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.s3 import S3Storage
+
+settings = get_settings()
 
 
 class Boto3S3Storage(S3Storage):

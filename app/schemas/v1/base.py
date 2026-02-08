@@ -71,7 +71,7 @@ class CustomModel(BaseModel):
 
     def serialize(self) -> Document:
         return self.model_dump(mode="json", by_alias=True, exclude_none=True)
-    
+
     @model_validator(mode="before")
     @classmethod
     def normalize_datetimes(cls, data: Any) -> Any:

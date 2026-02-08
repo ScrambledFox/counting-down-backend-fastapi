@@ -1,38 +1,104 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, UploadFile
 
-from app.core.config import Settings
+from app.core.config import get_settings
 from app.repositories.image import ImageRepository
-from app.schemas.v1.exceptions import NotFoundException
+from app.repositories.image_metadata import ImageMetadataRepository
+from app.schemas.v1.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.image_metadata import ImageMetadata, ImageMetadataCreate
+from app.schemas.v1.user import UserType
+from app.util.crypto import generate_crypto_id
 from app.util.image import create_thumbnail, get_thumbnail_name
+from app.util.time import utc_now
 
-settings = Settings()
+settings = get_settings()
 
 
 class ImageService:
-    def __init__(self, repo: Annotated[ImageRepository, Depends()]):
-        self._repo = repo
+    def __init__(
+        self,
+        image_repository: Annotated[ImageRepository, Depends()],
+        metadata_repository: Annotated[ImageMetadataRepository, Depends()],
+    ) -> None:
+        self._images = image_repository
+        self._metadata = metadata_repository
 
     async def get_image_bytes_by_key(self, key: str) -> bytes | None:
-        return await self._repo.get_advent_image(key)
+        return await self._images.get_advent_image(key)
+
+    async def list_images_by_uploader(self, uploader: UserType) -> list[ImageMetadata]:
+        return await self._metadata.get_by_user_type(uploader)
+
+    async def get_image_by_id(self, image_id: str) -> ImageMetadata | None:
+        return await self._metadata.get_image_metadata_by_id(image_id)
+
+    async def create_image(self, metadata: ImageMetadataCreate, image: UploadFile) -> ImageMetadata:
+        # Generate unique image key - Constant to ensure both thumbnail and original image
+        # are created for the same key
+        IMAGE_KEY = generate_crypto_id()
+
+        # Read the upload once so downstream consumers see the full payload
+        image_data = await image.read()
+        if not image_data:
+            raise BadRequestException("Uploaded image is empty")
+
+        # Save Image to storage
+        await self._images.upload_advent_image(IMAGE_KEY, image_data, image.content_type)
+
+        # Create and save thumbnail
+        THUMBNAIL_DATA, img_format = create_thumbnail(image_data, settings.thumbnail_size)
+        await self._images.upload_thumbnail_image(
+            IMAGE_KEY, THUMBNAIL_DATA, f"image/{img_format.lower()}"
+        )
+
+        # Save metadata to DB
+        new_metadata = ImageMetadata(
+            image_key=IMAGE_KEY,
+            title=metadata.title,
+            description=metadata.description,
+            image_tags=metadata.image_tags,
+            uploaded_by=metadata.uploaded_by,
+            media_type=image.content_type,
+            uploaded_at=utc_now(),
+        )
+        created_ref = await self._metadata.create_image_metadata(new_metadata)
+        return created_ref
 
     async def upload_image_bytes(
         self, key: str, data: bytes, content_type: str | None = None
     ) -> None:
-        await self._repo.upload_advent_image(key, data, content_type)
+        await self._images.upload_advent_image(key, data, content_type)
 
     async def request_thumbnail_generation(self, key: str) -> None:
         image = await self.get_image_bytes_by_key(key)
         if image is None:
             raise NotFoundException("Image", key)
 
-        thumbnail = create_thumbnail(image, settings.thumbnail_size)
-        await self._repo.upload_thumbnail_image(
-            get_thumbnail_name(key, settings.thumbnail_size), thumbnail, "image/jpeg"
+        thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
+        await self._images.upload_thumbnail_image(
+            get_thumbnail_name(key, settings.thumbnail_size),
+            thumbnail,
+            f"image/{img_format.lower()}",
         )
 
+    async def delete_image_by_id(self, image_id: str) -> bool:
+        metadata = await self.get_image_by_id(image_id)
+        if metadata is None:
+            raise NotFoundException("Image metadata", image_id)
+
+        # Soft delete metadata
+        deleted = await self._metadata.soft_delete_image_metadata(image_id)
+        if not deleted:
+            return False
+
+        # Delete image from storage - (Don't delete images for now)
+        # await self._images.delete_advent_image(metadata.image_key)
+        # await self._images.delete_thumbnail_image(metadata.image_key)
+
+        return True
+
     async def get_thumbnail_bytes_by_key(self, key: str) -> bytes | None:
-        return await self._repo.get_thumbnail_image(
+        return await self._images.get_thumbnail_image(
             get_thumbnail_name(key, settings.thumbnail_size)
         )

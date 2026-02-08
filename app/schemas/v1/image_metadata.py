@@ -1,0 +1,41 @@
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.schemas.v1.base import DefaultMongoIdField
+from app.schemas.v1.user import UserType
+from app.util.time import utc_now
+
+
+class ImageMetadataBase(BaseModel):
+    """Base model for image metadata."""
+
+    uploaded_by: UserType
+    title: str = Field("New Image", max_length=100)
+    description: str = Field("", max_length=500)
+    image_tags: list[str] = Field(default_factory=list)
+
+
+class ImageMetadata(ImageMetadataBase):
+    """Image metadata model."""
+
+    id: DefaultMongoIdField = None
+    image_key: str
+    media_type: str | None
+    uploaded_at: datetime = Field(default_factory=utc_now)
+    deleted_at: datetime | None = None
+
+
+class ImageMetadataUpdate(BaseModel):
+    """Model for updating image metadata."""
+
+    title: str | None = Field(None, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    image_tags: list[str] | None = None
+    deleted_at: datetime | None = None
+
+
+class ImageMetadataCreate(ImageMetadataBase):
+    """Model for creating image metadata."""
+
+    pass

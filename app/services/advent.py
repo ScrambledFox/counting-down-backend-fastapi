@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends, UploadFile
 
-from app.core.config import Settings
+from app.core.config import get_settings
 from app.repositories.advent import AdventRepository
 from app.repositories.image import ImageRepository
 from app.schemas.v1.advent import Advent, AdventCreate
@@ -12,7 +12,7 @@ from app.util.crypto import generate_crypto_id
 from app.util.image import create_thumbnail
 from app.util.time import utc_now
 
-settings = Settings()
+settings = get_settings()
 
 
 class AdventService:
@@ -46,8 +46,10 @@ class AdventService:
         await self._image_repo.upload_advent_image(image_key, image_data, image.content_type)
 
         # Create and save thumbnail
-        thumbnail_data = create_thumbnail(image_data, settings.thumbnail_size)
-        await self._image_repo.upload_thumbnail_image(image_key, thumbnail_data, image.content_type)
+        thumbnail_data, img_format = create_thumbnail(image_data, settings.thumbnail_size)
+        await self._image_repo.upload_thumbnail_image(
+            image_key, thumbnail_data, f"image/{img_format.lower()}"
+        )
 
         # Create Advent entry
         new_advent = Advent(

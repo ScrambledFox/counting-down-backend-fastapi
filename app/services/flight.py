@@ -151,13 +151,11 @@ class FlightService:
             airport, status=FlightStatus.ACTIVE
         )
         return await self._map_list_to_schema(flights)
-    
+
     async def check_flights_for_expiration(self) -> None:
         now = utc_now()
         flights = await self._flights.list_active_flights()
         for flight in flights:
             if flight.arrival_at < now:
                 flight.status = FlightStatus.EXPIRED
-                await self._flights.update_flight(
-                    (str(flight.id)), flight
-                )
+                await self._flights.update_flight((str(flight.id)), flight)
