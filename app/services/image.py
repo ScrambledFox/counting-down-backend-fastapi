@@ -33,15 +33,22 @@ class ImageService:
         self._images = image_repository
         self._metadata = metadata_repository
 
-    async def _create_thumbnail_for_image_key(self, key: str) -> None:
+    async def _create_thumbnails_for_image_key(self, key: str) -> None:
         image = await self.get_image_bytes_by_key(key)
         if image is None:
             raise NotFoundException("Image", key)
 
         thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
+        thumbnail_xl, _ = create_thumbnail(image, settings.thumbnail_xl_size)
+
         await self._images.upload_thumbnail_image(
             get_thumbnail_name(key, settings.thumbnail_size),
             thumbnail,
+            f"image/{img_format.lower()}",
+        )
+        await self._images.upload_thumbnail_image(
+            get_thumbnail_name(key, settings.thumbnail_xl_size),
+            thumbnail_xl,
             f"image/{img_format.lower()}",
         )
 
@@ -88,8 +95,8 @@ class ImageService:
         # Save Image to storage
         await self._images.upload_image(IMAGE_KEY, image_data, image.content_type)
 
-        #  Create thumbnail
-        asyncio.create_task(self._create_thumbnail_for_image_key(IMAGE_KEY))
+        #  Create thumbnails
+        asyncio.create_task(self._create_thumbnails_for_image_key(IMAGE_KEY))
 
         # Save metadata to DB
         new_metadata = ImageMetadata(
@@ -114,7 +121,7 @@ class ImageService:
         if image is None:
             raise NotFoundException("Image", key)
 
-        asyncio.create_task(self._create_thumbnail_for_image_key(key))
+        asyncio.create_task(self._create_thumbnails_for_image_key(key))
 
     async def delete_image_by_id(self, image_id: str) -> bool:
         metadata = await self.get_image_by_id(image_id)

@@ -7,7 +7,7 @@ from app.api.routing import make_router
 from app.core.auth import require_session
 from app.core.config import get_settings
 from app.schemas.v1.base import MongoId
-from app.schemas.v1.exceptions import BadRequestException, NotFoundException
+from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.image_metadata import (
     ImageMetadataCreate,
     ImageMetadataResponse,
@@ -47,7 +47,7 @@ def _parse_image_metadata_form(
 @router.get("", summary="List Images", dependencies=[Depends(require_session)])
 async def list_images(
     img_service: ImageServiceDependency,
-    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
 ) -> ImagePageResponse:
     items, next_cursor = await img_service.list_image_metadata_page(limit=limit, cursor=cursor)
@@ -68,7 +68,7 @@ async def list_images(
 async def get_images_for_me(
     img_service: ImageServiceDependency,
     user_info: Annotated[SessionResponse, Depends(require_session)],
-    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
 ) -> ImagePageResponse:
     items, next_cursor = await img_service.list_image_metadata_page(
@@ -89,7 +89,7 @@ async def get_images_for_me(
 async def get_images_by_me(
     img_service: ImageServiceDependency,
     user_info: Annotated[SessionResponse, Depends(require_session)],
-    limit: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE),
+    limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
 ) -> ImagePageResponse:
     items, next_cursor = await img_service.list_image_metadata_page(
@@ -163,7 +163,7 @@ async def get_image_item(
 async def get_image_presigned_url(
     image_key: str,
     service: ImageServiceDependency,
-    expires_in: int | None = Query(None, ge=1, le=1 * 24 * 3600),
+    expires_in: int | None = Query(None, ge=1, le=settings.aws_s3_max_presign_expires),
 ) -> ImagePresignedUrlResponse:
     # Check if image exists before generating presigned URL to avoid generating URLs for
     # non-existent images
@@ -193,8 +193,6 @@ async def request_thumbnail_generation(
     image_key: str,
     service: ImageServiceDependency,
 ):
-    if await service.get_thumbnail_bytes_by_key(image_key) is not None:
-        raise BadRequestException("Thumbnail already exists for this image")
     await service.request_thumbnail_generation(image_key)
     return {"message": "Thumbnail generation requested successfully"}
 

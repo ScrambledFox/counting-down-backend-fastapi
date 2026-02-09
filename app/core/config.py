@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
     thumbnail_size: int = 128
+    thumbnail_xl_size: int = 512
     aws_s3_presign_expires: int = 3600
     aws_s3_max_presign_expires: int = 1 * 24 * 3600  # 1 days in seconds
 
@@ -38,8 +39,8 @@ class Settings(BaseSettings):
     aws_access_key: str | None = None
     aws_secret_key: str | None = None
 
-    DEFAULT_PAGE_SIZE: int = 20
-    MAX_PAGE_SIZE: int = 100
+    default_page_size: int = 20
+    max_page_size: int = 100
 
     model_config = SettingsConfigDict(env_file=".env", populate_by_name=True, case_sensitive=False)
 
