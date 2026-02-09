@@ -27,10 +27,11 @@ class AuthService:
         self._user_service = user_service
 
     def _get_user_by_access_key(self, access_key: str) -> UserType | None:
-        valid_keys = {
-            settings.access_key_danfeng: UserType.DANFENG,
-            settings.access_key_joris: UserType.JORIS,
-        }
+        valid_keys: dict[str, UserType] = {}
+        if settings.access_key_danfeng:
+            valid_keys[settings.access_key_danfeng] = UserType.DANFENG
+        if settings.access_key_joris:
+            valid_keys[settings.access_key_joris] = UserType.JORIS
         return valid_keys.get(access_key)
 
     def _session_response_from_session(self, session: Session) -> SessionResponse:

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     aws_s3_presign_expires: int = 3600
     aws_s3_max_presign_expires: int = 1 * 24 * 3600  # 1 days in seconds
 
-    access_key_danfeng: str
-    access_key_joris: str
+    access_key_danfeng: str | None = None
+    access_key_joris: str | None = None
     session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
     aws_region: str = "eu-west-1"
@@ -87,7 +87,21 @@ class Settings(BaseSettings):
             return sizes or None
         return v
 
+    @model_validator(mode="after")
+    def require_access_keys_in_production(self) -> "Settings":
+        if self.app_env.lower() == "prod":
+            missing: list[str] = []
+            if not self.access_key_danfeng:
+                missing.append("ACCESS_KEY_DANFENG")
+            if not self.access_key_joris:
+                missing.append("ACCESS_KEY_JORIS")
+            if missing:
+                raise ValueError(
+                    "Missing required access key env vars in production: " + ", ".join(missing)
+                )
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore
+    return Settings()
