@@ -48,8 +48,24 @@ class ImageCursorPayload(BaseModel):
     id: MongoId
 
 
+class ImageMetadataResponse(ImageMetadata):
+    """Response model for image metadata."""
+
+    url: str
+    thumbnail_url: str | None = None
+
+
 class ImagePageResponse(BaseModel):
     """Response model for keyset pagination."""
 
-    items: list[ImageMetadata]
+    items: list[ImageMetadataResponse]
     next_cursor: str | None = None
+
+
+class ImagePresignedUrlResponse(BaseModel):
+    """Response model for S3 presigned image URLs."""
+
+    image_key: str
+    url: str | None = None
+    thumbnail_url: str | None = None
+    expires_in: int

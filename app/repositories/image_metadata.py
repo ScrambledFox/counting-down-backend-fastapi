@@ -36,6 +36,10 @@ class ImageMetadataRepository:
         doc = await self._collection.find_one({"_id": ObjectId(metadata_id), "deleted_at": None})
         return ImageMetadata.model_validate(doc) if doc else None
 
+    async def get_image_metadata_by_key(self, image_key: str) -> ImageMetadata | None:
+        doc = await self._collection.find_one({"image_key": image_key, "deleted_at": None})
+        return ImageMetadata.model_validate(doc) if doc else None
+
     async def list_image_metadata_page(
         self, limit: int, cursor: ImageCursorPayload | None, user_filter: UserType | None = None
     ) -> list[ImageMetadata]:

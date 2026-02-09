@@ -25,9 +25,11 @@ class Settings(BaseSettings):
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
     thumbnail_size: int = 128
+    aws_s3_presign_expires: int = 3600
+    aws_s3_max_presign_expires: int = 1 * 24 * 3600  # 1 days in seconds
 
-    access_key_danfeng: str = "danfeng_secret_key"
-    access_key_joris: str = "joris_secret_key"
+    access_key_danfeng: str
+    access_key_joris: str
     session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
     aws_region: str = "eu-west-1"
@@ -59,4 +61,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore

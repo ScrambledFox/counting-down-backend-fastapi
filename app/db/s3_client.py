@@ -99,6 +99,32 @@ class Boto3S3Storage(S3Storage):
         )
         return data
 
+    async def get_object_exists(self, *, bucket: str, key: str) -> bool:
+        self._logger.debug(
+            f"Checking if S3 object exists for bucket: {bucket}, key: {key}",
+            extra={"bucket": bucket, "key": key},
+        )
+
+        def _head() -> bool:
+            self._client.head_object(Bucket=bucket, Key=key)
+            return True
+
+        try:
+            return await run_in_threadpool(_head)
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code")
+            if error_code == "404" or error_code == "NoSuchKey":
+                self._logger.debug(
+                    f"S3 object does not exist for bucket: {bucket}, key: {key}",
+                    extra={"bucket": bucket, "key": key},
+                )
+                return False
+            self._logger.exception(
+                f"S3 head_object failed for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
+            )
+            raise
+
     async def delete_object(self, *, bucket: str, key: str) -> None:
         self._logger.debug(
             f"Deleting S3 object for bucket: {bucket}, key: {key}",
@@ -138,8 +164,8 @@ class Boto3S3Storage(S3Storage):
         try:
             url = await run_in_threadpool(_generate_url)
             self._logger.debug(
-                f"Generated presigned URL for bucket: {bucket}, key: {key}, url: {url}",
-                extra={"bucket": bucket, "key": key, "url": url},
+                f"Generated presigned URL for bucket: {bucket}, key: {key}",
+                extra={"bucket": bucket, "key": key},
             )
             return url
         except ClientError:

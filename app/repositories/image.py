@@ -12,7 +12,7 @@ class ImageRepository:
         self._s3_storage = s3_storage
         self._bucket = settings.aws_s3_bucket
 
-    def _advent_prefix(self) -> str:
+    def _image_prefix(self) -> str:
         prefix = settings.aws_s3_image_folder
         if not prefix:
             return ""
@@ -28,32 +28,46 @@ class ImageRepository:
             return prefix + "/"
         return prefix
 
-    def _advent_key(self, name: str) -> str:
-        prefix = self._advent_prefix()
+    def _image_key(self, name: str) -> str:
+        prefix = self._image_prefix()
         return prefix + name.lstrip("/")
 
     def _thumbnail_key(self, name: str) -> str:
         prefix = self._thumbnail_prefix()
         return prefix + name.lstrip("/")
 
-    async def get_advent_image(self, name: str) -> bytes | None:
-        key = self._advent_key(name)
+    async def get_image(self, name: str) -> bytes | None:
+        key = self._image_key(name)
         return await self._s3_storage.get_object(bucket=self._bucket, key=key)
 
-    async def upload_advent_image(
-        self, name: str, data: bytes, content_type: str | None = None
-    ) -> None:
-        key = self._advent_key(name)
+    async def get_image_exists(self, name: str) -> bool:
+        key = self._image_key(name)
+        return await self._s3_storage.get_object_exists(bucket=self._bucket, key=key)
+
+    async def get_thumbnail_exists(self, name: str) -> bool:
+        key = self._thumbnail_key(name)
+        return await self._s3_storage.get_object_exists(bucket=self._bucket, key=key)
+
+    async def upload_image(self, name: str, data: bytes, content_type: str | None = None) -> None:
+        key = self._image_key(name)
         await self._s3_storage.upload_object(
             bucket=self._bucket, key=key, data=data, content_type=content_type
         )
 
-    async def delete_advent_image(self, name: str) -> None:
-        key = self._advent_key(name)
+    # This is not currently used, but we may want to support image deletion in the future,
+    # so we can keep this here for now
+    async def delete_image(self, name: str) -> None:
+        key = self._image_key(name)
         await self._s3_storage.delete_object(bucket=self._bucket, key=key)
 
-    async def generate_advent_presigned_url(self, name: str, expires_in: int = 3600) -> str:
-        key = self._advent_key(name)
+    async def generate_image_presigned_url(self, name: str, expires_in: int = 3600) -> str:
+        key = self._image_key(name)
+        return await self._s3_storage.generate_presigned_url(
+            bucket=self._bucket, key=key, expires_in=expires_in
+        )
+
+    async def generate_thumbnail_presigned_url(self, name: str, expires_in: int = 3600) -> str:
+        key = self._thumbnail_key(name)
         return await self._s3_storage.generate_presigned_url(
             bucket=self._bucket, key=key, expires_in=expires_in
         )
@@ -69,3 +83,9 @@ class ImageRepository:
     async def get_thumbnail_image(self, name: str) -> bytes | None:
         key = self._thumbnail_key(name)
         return await self._s3_storage.get_object(bucket=self._bucket, key=key)
+
+    # This is not currently used, but we may want to support thumbnail deletion in the future,
+    # so we can keep this here for now
+    async def delete_thumbnail_image(self, name: str) -> None:
+        key = self._thumbnail_key(name)
+        await self._s3_storage.delete_object(bucket=self._bucket, key=key)

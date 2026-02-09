@@ -43,7 +43,7 @@ class AdventService:
             raise BadRequestException("Uploaded image is empty")
 
         # Save Image to storage
-        await self._image_repo.upload_advent_image(image_key, image_data, image.content_type)
+        await self._image_repo.upload_image(image_key, image_data, image.content_type)
 
         # Create and save thumbnail
         thumbnail_data, img_format = create_thumbnail(image_data, settings.thumbnail_size)

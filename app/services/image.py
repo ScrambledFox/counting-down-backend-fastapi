@@ -46,7 +46,10 @@ class ImageService:
         )
 
     async def get_image_bytes_by_key(self, key: str) -> bytes | None:
-        return await self._images.get_advent_image(key)
+        return await self._images.get_image(key)
+
+    async def get_metadata_by_image_key(self, key: str) -> ImageMetadata | None:
+        return await self._metadata.get_image_metadata_by_key(key)
 
     async def list_images_by_uploader(self, uploader: UserType) -> list[ImageMetadata]:
         return await self._metadata.get_by_user_type(uploader)
@@ -69,6 +72,9 @@ class ImageService:
     async def get_image_by_id(self, image_id: str) -> ImageMetadata | None:
         return await self._metadata.get_image_metadata_by_id(image_id)
 
+    async def get_image_exists_by_key(self, key: str) -> bool:
+        return await self._images.get_image_exists(key)
+
     async def create_image(self, metadata: ImageMetadataCreate, image: UploadFile) -> ImageMetadata:
         # Generate unique image key - Constant to ensure both thumbnail and original image
         # are created for the same key
@@ -80,7 +86,7 @@ class ImageService:
             raise BadRequestException("Uploaded image is empty")
 
         # Save Image to storage
-        await self._images.upload_advent_image(IMAGE_KEY, image_data, image.content_type)
+        await self._images.upload_image(IMAGE_KEY, image_data, image.content_type)
 
         #  Create thumbnail
         asyncio.create_task(self._create_thumbnail_for_image_key(IMAGE_KEY))
@@ -101,14 +107,14 @@ class ImageService:
     async def upload_image_bytes(
         self, key: str, data: bytes, content_type: str | None = None
     ) -> None:
-        await self._images.upload_advent_image(key, data, content_type)
+        await self._images.upload_image(key, data, content_type)
 
     async def request_thumbnail_generation(self, key: str) -> None:
         image = await self.get_image_bytes_by_key(key)
         if image is None:
             raise NotFoundException("Image", key)
 
-        asyncio.run(self._create_thumbnail_for_image_key(key))
+        asyncio.create_task(self._create_thumbnail_for_image_key(key))
 
     async def delete_image_by_id(self, image_id: str) -> bool:
         metadata = await self.get_image_by_id(image_id)
@@ -121,7 +127,7 @@ class ImageService:
             return False
 
         # Delete image from storage - (Don't delete images for now)
-        # await self._images.delete_advent_image(metadata.image_key)
+        # await self._images.delete_image(metadata.image_key)
         # await self._images.delete_thumbnail_image(metadata.image_key)
 
         return True
@@ -130,3 +136,18 @@ class ImageService:
         return await self._images.get_thumbnail_image(
             get_thumbnail_name(key, settings.thumbnail_size)
         )
+
+    async def get_image_presigned_url(self, key: str, expires_in: int | None = None) -> str:
+        ttl = expires_in or settings.aws_s3_presign_expires
+        return await self._images.generate_image_presigned_url(key, ttl)
+
+    async def get_thumbnail_presigned_url(
+        self, key: str, expires_in: int | None = None
+    ) -> str | None:
+        ttl = expires_in or settings.aws_s3_presign_expires
+        thumbnail_key = get_thumbnail_name(key, settings.thumbnail_size)
+
+        if not await self._images.get_thumbnail_exists(thumbnail_key):
+            return None
+
+        return await self._images.generate_thumbnail_presigned_url(thumbnail_key, ttl)
