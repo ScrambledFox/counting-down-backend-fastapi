@@ -53,6 +53,7 @@ class ImageMetadataResponse(ImageMetadata):
 
     url: str
     thumbnail_url: str | None = None
+    thumbnail_xl_url: str | None = None
 
 
 class ImagePageResponse(BaseModel):
@@ -68,4 +69,5 @@ class ImagePresignedUrlResponse(BaseModel):
     image_key: str
     url: str | None = None
     thumbnail_url: str | None = None
+    thumbnail_xl_url: str | None = None
     expires_in: int

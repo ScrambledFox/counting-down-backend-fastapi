@@ -33,24 +33,43 @@ class ImageService:
         self._images = image_repository
         self._metadata = metadata_repository
 
-    async def _create_thumbnails_for_image_key(self, key: str) -> None:
+    async def _ensure_thumbnails_for_image_key(self, key: str) -> None:
         image = await self.get_image_bytes_by_key(key)
         if image is None:
             raise NotFoundException("Image", key)
 
-        thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
-        thumbnail_xl, _ = create_thumbnail(image, settings.thumbnail_xl_size)
+        # Create standard thumbnail if it doesn't exist
+        thumbnail_key = get_thumbnail_name(key, settings.thumbnail_size)
+        if not await self._images.get_thumbnail_exists(thumbnail_key):
+            thumbnail, img_format = create_thumbnail(image, settings.thumbnail_size)
+            await self._images.upload_image(thumbnail_key, thumbnail, f"image/{img_format.lower()}")
+
+        # Create XL thumbnail if it doesn't exist
+        thumbnail_xl_key = get_thumbnail_name(key, settings.thumbnail_xl_size)
+        if not await self._images.get_thumbnail_exists(thumbnail_xl_key):
+            thumbnail_xl, img_format = create_thumbnail(image, settings.thumbnail_xl_size)
+            await self._images.upload_image(
+                thumbnail_xl_key, thumbnail_xl, f"image/{img_format.lower()}"
+            )
+
+    async def _create_custom_thumbnail_for_image_key(self, key: str, thumbnail_size: int) -> None:
+        image = await self.get_image_bytes_by_key(key)
+        if image is None:
+            raise NotFoundException("Image", key)
+
+        thumbnail, img_format = create_thumbnail(image, thumbnail_size)
 
         await self._images.upload_thumbnail_image(
-            get_thumbnail_name(key, settings.thumbnail_size),
+            get_thumbnail_name(key, thumbnail_size),
             thumbnail,
             f"image/{img_format.lower()}",
         )
-        await self._images.upload_thumbnail_image(
-            get_thumbnail_name(key, settings.thumbnail_xl_size),
-            thumbnail_xl,
-            f"image/{img_format.lower()}",
-        )
+
+    async def _create_standard_thumbnail_for_image_key(self, key: str) -> None:
+        await self._create_custom_thumbnail_for_image_key(key, settings.thumbnail_size)
+
+    async def _create_xl_thumbnail_for_image_key(self, key: str) -> None:
+        await self._create_custom_thumbnail_for_image_key(key, settings.thumbnail_xl_size)
 
     async def get_image_bytes_by_key(self, key: str) -> bytes | None:
         return await self._images.get_image(key)
@@ -96,7 +115,7 @@ class ImageService:
         await self._images.upload_image(IMAGE_KEY, image_data, image.content_type)
 
         #  Create thumbnails
-        asyncio.create_task(self._create_thumbnails_for_image_key(IMAGE_KEY))
+        asyncio.create_task(self._ensure_thumbnails_for_image_key(IMAGE_KEY))
 
         # Save metadata to DB
         new_metadata = ImageMetadata(
@@ -116,12 +135,17 @@ class ImageService:
     ) -> None:
         await self._images.upload_image(key, data, content_type)
 
-    async def request_thumbnail_generation(self, key: str) -> None:
+    async def request_thumbnail_generation(
+        self, key: str, thumbnail_size: int | None = None
+    ) -> None:
         image = await self.get_image_bytes_by_key(key)
         if image is None:
             raise NotFoundException("Image", key)
 
-        asyncio.create_task(self._create_thumbnails_for_image_key(key))
+        if thumbnail_size is None:
+            asyncio.create_task(self._ensure_thumbnails_for_image_key(key))
+        else:
+            asyncio.create_task(self._create_custom_thumbnail_for_image_key(key, thumbnail_size))
 
     async def delete_image_by_id(self, image_id: str) -> bool:
         metadata = await self.get_image_by_id(image_id)
@@ -139,9 +163,11 @@ class ImageService:
 
         return True
 
-    async def get_thumbnail_bytes_by_key(self, key: str) -> bytes | None:
+    async def get_thumbnail_bytes_by_key(
+        self, key: str, thumbnail_size: int | None = None
+    ) -> bytes | None:
         return await self._images.get_thumbnail_image(
-            get_thumbnail_name(key, settings.thumbnail_size)
+            get_thumbnail_name(key, thumbnail_size or settings.thumbnail_size)
         )
 
     async def get_image_presigned_url(self, key: str, expires_in: int | None = None) -> str:

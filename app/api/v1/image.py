@@ -192,8 +192,9 @@ async def get_image_presigned_url(
 async def request_thumbnail_generation(
     image_key: str,
     service: ImageServiceDependency,
+    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
 ):
-    await service.request_thumbnail_generation(image_key)
+    await service.request_thumbnail_generation(image_key, thumbnail_size)
     return {"message": "Thumbnail generation requested successfully"}
 
 
@@ -205,8 +206,9 @@ async def request_thumbnail_generation(
 async def get_thumbnail_image(
     image_key: str,
     service: ImageServiceDependency,
+    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
 ) -> StreamingResponse:
-    data = await service.get_thumbnail_bytes_by_key(image_key)
+    data = await service.get_thumbnail_bytes_by_key(image_key, thumbnail_size)
     if data is None:
         raise NotFoundException("Thumbnail Image", image_key)
 
@@ -225,8 +227,9 @@ async def get_thumbnail_presigned_url(
     expires_in: int = Query(
         settings.aws_s3_presign_expires, ge=1, le=settings.aws_s3_max_presign_expires
     ),
+    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
 ) -> ImagePresignedUrlResponse:
-    if not await service.get_image_exists_by_key(image_key):
+    if not await service.get_thumbnail_presigned_url(image_key, thumbnail_size):
         raise NotFoundException("Image", image_key)
 
     url = await service.get_thumbnail_presigned_url(image_key, expires_in)
