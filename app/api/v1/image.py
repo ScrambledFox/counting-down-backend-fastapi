@@ -8,11 +8,12 @@ from app.core.auth import require_session
 from app.core.config import get_settings
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import NotFoundException
-from app.schemas.v1.image_metadata import (
+from app.schemas.v1.image import (
     ImageMetadataCreate,
     ImageMetadataResponse,
     ImagePageResponse,
     ImagePresignedUrlResponse,
+    ImageThumbnailSizes,
 )
 from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.user import UserType
@@ -57,6 +58,9 @@ async def list_images(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
             thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, settings.thumbnail_xl_size
+            ),
         )
         for item in items
     ]
@@ -79,6 +83,9 @@ async def get_images_for_me(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
             thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, settings.thumbnail_xl_size
+            ),
         )
         for item in items
     ]
@@ -100,6 +107,9 @@ async def get_images_by_me(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
             thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, settings.thumbnail_xl_size
+            ),
         )
         for item in items
     ]
@@ -117,8 +127,16 @@ async def get_image_metadata(
 
     url = await img_service.get_image_presigned_url(metadata.image_key)
     thumbnail_url = await img_service.get_thumbnail_presigned_url(metadata.image_key)
+    thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
+        metadata.image_key, settings.thumbnail_xl_size
+    )
 
-    return ImageMetadataResponse(**metadata.model_dump(), url=url, thumbnail_url=thumbnail_url)
+    return ImageMetadataResponse(
+        **metadata.model_dump(),
+        url=url,
+        thumbnail_url=thumbnail_url,
+        thumbnail_xl_url=thumbnail_xl_url,
+    )
 
 
 @router.post("/", summary="Create Image")
@@ -131,8 +149,13 @@ async def create_image_metadata(
 
     url = await img_service.get_image_presigned_url(item.image_key)
     thumbnail_url = await img_service.get_thumbnail_presigned_url(item.image_key)
+    thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
+        item.image_key, settings.thumbnail_xl_size
+    )
 
-    return ImageMetadataResponse(**item.model_dump(), url=url, thumbnail_url=thumbnail_url)
+    return ImageMetadataResponse(
+        **item.model_dump(), url=url, thumbnail_url=thumbnail_url, thumbnail_xl_url=thumbnail_xl_url
+    )
 
 
 # ------------------------------------
@@ -192,9 +215,23 @@ async def get_image_presigned_url(
 async def request_thumbnail_generation(
     image_key: str,
     service: ImageServiceDependency,
-    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
+    thumbnail_sizes: list[ImageThumbnailSizes] = Query(
+        [ImageThumbnailSizes.MEDIUM],
+        description="List of thumbnail sizes to generate. If not provided, "
+        "the default thumbnail size will be generated.",
+    ),
+    custom_thumbnail_sizes: list[int] | None = Query(
+        None,
+        ge=settings.thumbnail_min_size,
+        le=settings.thumbnail_max_size,
+        description="Optional list of custom thumbnail sizes to generate.",
+    ),
 ):
-    await service.request_thumbnail_generation(image_key, thumbnail_size)
+    resolved_sizes = [size.value for size in thumbnail_sizes]
+    if custom_thumbnail_sizes:
+        resolved_sizes.extend(custom_thumbnail_sizes)
+
+    await service.request_thumbnail_generation(image_key, resolved_sizes)
     return {"message": "Thumbnail generation requested successfully"}
 
 
@@ -206,9 +243,16 @@ async def request_thumbnail_generation(
 async def get_thumbnail_image(
     image_key: str,
     service: ImageServiceDependency,
-    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
+    thumbnail_size: ImageThumbnailSizes = Query(ImageThumbnailSizes.MEDIUM),
+    custom_thumbnail_size: int | None = Query(
+        None,
+        ge=settings.thumbnail_min_size,
+        le=settings.thumbnail_max_size,
+        description="Optional custom thumbnail size.",
+    ),
 ) -> StreamingResponse:
-    data = await service.get_thumbnail_bytes_by_key(image_key, thumbnail_size)
+    resolved_size = custom_thumbnail_size or thumbnail_size.value
+    data = await service.get_thumbnail_bytes_by_key(image_key, resolved_size)
     if data is None:
         raise NotFoundException("Thumbnail Image", image_key)
 
@@ -227,12 +271,18 @@ async def get_thumbnail_presigned_url(
     expires_in: int = Query(
         settings.aws_s3_presign_expires, ge=1, le=settings.aws_s3_max_presign_expires
     ),
-    thumbnail_size: int = Query(settings.thumbnail_size, ge=1, le=settings.thumbnail_xl_size),
+    thumbnail_size: ImageThumbnailSizes = Query(ImageThumbnailSizes.MEDIUM),
+    custom_thumbnail_size: int | None = Query(
+        None,
+        ge=settings.thumbnail_min_size,
+        le=settings.thumbnail_max_size,
+        description="Optional custom thumbnail size.",
+    ),
 ) -> ImagePresignedUrlResponse:
-    if not await service.get_thumbnail_presigned_url(image_key, thumbnail_size):
+    resolved_size = custom_thumbnail_size or thumbnail_size.value
+    url = await service.get_thumbnail_presigned_url(image_key, resolved_size, expires_in)
+    if url is None:
         raise NotFoundException("Image", image_key)
-
-    url = await service.get_thumbnail_presigned_url(image_key, expires_in)
 
     return ImagePresignedUrlResponse(
         image_key=image_key,

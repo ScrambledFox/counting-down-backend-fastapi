@@ -25,7 +25,14 @@ class Settings(BaseSettings):
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
     thumbnail_size: int = 128
-    thumbnail_xl_size: int = 512
+    thumbnail_xl_size: int = 1200
+    # Optional explicit list of thumbnail sizes (comma-separated). If provided, supersedes
+    # thumbnail_size/thumbnail_xl_size.
+    thumbnail_sizes: list[int] | None = None
+    # Allow custom thumbnail sizes outside the configured list, within min/max bounds.
+    thumbnail_allow_custom_sizes: bool = True
+    thumbnail_min_size: int = 32
+    thumbnail_max_size: int = 2000
     aws_s3_presign_expires: int = 3600
     aws_s3_max_presign_expires: int = 1 * 24 * 3600  # 1 days in seconds
 
@@ -57,6 +64,27 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             parts = [p.strip() for p in v.split(",") if p.strip()]
             return parts or None
+        return v
+
+    @field_validator("thumbnail_sizes", mode="before")
+    @classmethod
+    def split_thumbnail_sizes(cls, v: str | list[int] | None):  # type: ignore[override]
+        """Allow THUMBNAIL_SIZES env var to be provided as a comma-separated string.
+
+        Example:
+            THUMBNAIL_SIZES="128, 512, 1200"
+        """
+        if v is None:
+            return None
+        if isinstance(v, str):
+            parts = [p.strip() for p in v.split(",") if p.strip()]
+            sizes: list[int] = []
+            for part in parts:
+                try:
+                    sizes.append(int(part))
+                except ValueError as exc:
+                    raise ValueError(f"Invalid thumbnail size: {part}") from exc
+            return sizes or None
         return v
 
 

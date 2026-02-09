@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.db.mongo_client import get_db
 from app.models.mongo import AsyncDB
 from app.schemas.v1.base import MongoId
-from app.schemas.v1.image_metadata import ImageCursorPayload, ImageMetadata, ImageMetadataUpdate
+from app.schemas.v1.image import ImageCursorPayload, ImageMetadata, ImageMetadataUpdate
 from app.schemas.v1.user import UserType
 from app.util.time import utc_now
 

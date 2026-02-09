@@ -1,10 +1,16 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
 from app.schemas.v1.base import DefaultMongoIdField, MongoId
 from app.schemas.v1.user import UserType
 from app.util.time import utc_now
+
+
+class ImageThumbnailSizes(int, Enum):
+    MEDIUM = 128
+    XL = 1200
 
 
 class ImageMetadataBase(BaseModel):

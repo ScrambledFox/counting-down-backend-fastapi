@@ -8,7 +8,7 @@ from bson import ObjectId
 from PIL import Image, ImageOps
 
 from app.schemas.v1.exceptions import BadRequestException
-from app.schemas.v1.image_metadata import ImageCursorPayload
+from app.schemas.v1.image import ImageCursorPayload
 
 
 def create_thumbnail(image_data: bytes, size: int) -> tuple[bytes, str]:
