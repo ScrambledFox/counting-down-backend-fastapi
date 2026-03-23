@@ -46,3 +46,6 @@ class AdventRepository:
     async def delete_advent_by_id(self, advent_id: MongoId) -> bool:
         result = await self._collection.delete_one({"_id": ObjectId(advent_id)})
         return result.deleted_count > 0
+
+    async def count_advents_uploaded_by(self, user_type: UserType) -> int:
+        return await self._collection.count_documents({"uploaded_by": user_type})

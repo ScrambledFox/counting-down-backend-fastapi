@@ -73,3 +73,6 @@ class AdventService:
 
         # Delete advent entry
         await self._advent_repo.delete_advent_by_id(advent_id)
+
+    async def count_advents_uploaded_by(self, user: UserType) -> int:
+        return await self._advent_repo.count_advents_uploaded_by(user)

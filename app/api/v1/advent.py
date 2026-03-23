@@ -24,6 +24,13 @@ async def list_advent_items_by_me(
     return await advent_service.list_advents_uploaded_by(session.user_type)
 
 
+@router.get("/by_me/count", summary="Count Advent Items Uploaded By My User Type")
+async def count_advent_items_by_me(
+    advent_service: AdventServiceDep, session: SessionResponse = Depends(require_session)
+) -> int:
+    return await advent_service.count_advents_uploaded_by(session.user_type)
+
+
 @router.get("/for_me", summary="List Advent Items For My User Type", response_model=list[Advent])
 async def list_advent_items_for_me(
     advent_service: AdventServiceDep, session: SessionResponse = Depends(require_session)
