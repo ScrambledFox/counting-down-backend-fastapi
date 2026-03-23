@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 from app.schemas.v1.user import UserType
 from app.util.user import get_other_user_type
@@ -21,3 +23,7 @@ class Session(SessionBase):
 
 class SessionResponse(SessionBase):
     pass
+
+
+class LoginRequest(BaseModel):
+    access_key: str

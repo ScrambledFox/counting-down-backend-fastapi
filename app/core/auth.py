@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Security
+from fastapi import Cookie, Depends, Security
 from fastapi.security import APIKeyHeader
 
 from app.core import logging
@@ -8,19 +8,21 @@ from app.schemas.v1.exceptions import UnauthorizedException
 from app.schemas.v1.session import SessionResponse
 from app.services.auth import AuthService
 
-session_id_header = APIKeyHeader(name="X-Session-Id")
+session_id_header = APIKeyHeader(name="X-Session-Id", auto_error=False)
 
 logger = logging.get_logger(__name__)
 
 
 async def require_session(
     auth_service: Annotated[AuthService, Depends()],
-    x_session_id: str = Security(session_id_header),
+    x_session_id: str | None = Security(session_id_header),
+    session_id: str | None = Cookie(default=None),
 ) -> SessionResponse:
     """Dependency to require a valid session.
 
-    Raises:
-        UnauthorizedException
+    Accepts the session ID from the HttpOnly cookie (preferred) or the
+    X-Session-Id request header. Raises UnauthorizedException if neither
+    is present or the session is invalid/expired.
 
     Returns:
         SessionResponse: Info about the current session and authenticated user.
@@ -29,8 +31,11 @@ async def require_session(
          - created_at: datetime
          - expires_at: datetime
     """
+    sid = session_id or x_session_id
+    if not sid:
+        raise UnauthorizedException("No session provided")
     try:
-        return await auth_service.get_session_info(x_session_id)
+        return await auth_service.get_session_info(sid)
     except Exception as e:
-        logger.warning(f"Unauthorized access attempt with session_id: {x_session_id}")
+        logger.warning("Unauthorized access attempt")
         raise UnauthorizedException("Invalid or expired session") from e
