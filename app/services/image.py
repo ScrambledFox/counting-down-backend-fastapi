@@ -7,7 +7,7 @@ from app.core.config import get_settings
 from app.repositories.image import ImageRepository
 from app.repositories.image_metadata import ImageMetadataRepository
 from app.schemas.v1.exceptions import BadRequestException, NotFoundException
-from app.schemas.v1.image import ImageMetadata, ImageMetadataCreate
+from app.schemas.v1.image import ImageMetadata, ImageMetadataCreate, ImageMetadataUpdate
 from app.schemas.v1.user import UserType
 from app.util.crypto import generate_crypto_id
 from app.util.image import (
@@ -182,6 +182,11 @@ class ImageService:
         )
         created_ref = await self._metadata.create_image_metadata(new_metadata)
         return created_ref
+
+    async def update_image_metadata(
+        self, image_id: str, metadata_update: ImageMetadataUpdate
+    ) -> ImageMetadata | None:
+        return await self._metadata.update_image_metadata(image_id, metadata_update)
 
     async def upload_image_bytes(
         self, key: str, data: bytes, content_type: str | None = None

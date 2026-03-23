@@ -32,19 +32,18 @@ class ImageMetadata(ImageMetadataBase):
     deleted_at: datetime | None = None
 
 
+class ImageMetadataCreate(ImageMetadataBase):
+    """Model for creating image metadata."""
+
+    pass
+
+
 class ImageMetadataUpdate(BaseModel):
     """Model for updating image metadata."""
 
     title: str | None = Field(None, max_length=100)
     description: str | None = Field(None, max_length=500)
     image_tags: list[str] | None = None
-    deleted_at: datetime | None = None
-
-
-class ImageMetadataCreate(ImageMetadataBase):
-    """Model for creating image metadata."""
-
-    pass
 
 
 class ImageCursorPayload(BaseModel):

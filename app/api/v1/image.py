@@ -11,6 +11,7 @@ from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.image import (
     ImageMetadataCreate,
     ImageMetadataResponse,
+    ImageMetadataUpdate,
     ImagePageResponse,
     ImagePresignedUrlResponse,
     ImageThumbnailSizes,
@@ -156,6 +157,44 @@ async def create_image_metadata(
     return ImageMetadataResponse(
         **item.model_dump(), url=url, thumbnail_url=thumbnail_url, thumbnail_xl_url=thumbnail_xl_url
     )
+
+
+@router.patch(
+    "/{id}/meta", summary="Update Image Metadata", dependencies=[Depends(require_session)]
+)
+async def update_image_metadata(
+    id: MongoId,
+    metadata_update: ImageMetadataUpdate,
+    img_service: ImageServiceDependency,
+) -> ImageMetadataResponse:
+    updated_metadata = await img_service.update_image_metadata(id, metadata_update)
+    if updated_metadata is None:
+        raise NotFoundException("Image Metadata", id)
+
+    url = await img_service.get_image_presigned_url(updated_metadata.image_key)
+    thumbnail_url = await img_service.get_thumbnail_presigned_url(updated_metadata.image_key)
+    thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
+        updated_metadata.image_key, settings.thumbnail_xl_size
+    )
+
+    return ImageMetadataResponse(
+        **updated_metadata.model_dump(),
+        url=url,
+        thumbnail_url=thumbnail_url,
+        thumbnail_xl_url=thumbnail_xl_url,
+    )
+
+
+@router.delete("/{id}", summary="Delete Image", dependencies=[Depends(require_session)])
+async def delete_image(
+    id: MongoId,
+    img_service: ImageServiceDependency,
+) -> dict[str, str]:
+    success = await img_service.delete_image_by_id(id)
+    if not success:
+        raise NotFoundException("Image Metadata", id)
+
+    return {"message": "Image deleted successfully"}
 
 
 # ------------------------------------
