@@ -1,5 +1,6 @@
 from typing import Annotated
 
+from bson import ObjectId
 from fastapi import Depends
 
 from app.core.config import get_settings
@@ -59,17 +60,20 @@ class FlightRepository:
         return Flight.model_validate(doc)
 
     async def get_flight(self, flight_id: MongoId) -> Flight | None:
-        doc = await self._flights.find_one({"_id": flight_id})
+        doc = await self._flights.find_one({"_id": ObjectId(flight_id)})
         if doc:
             return Flight.model_validate(doc)
         return None
 
     async def update_flight(self, flight_id: MongoId, flight: Flight) -> Flight | None:
-        await self._flights.update_one({"_id": flight_id}, {"$set": dict(flight)})
+        await self._flights.update_one(
+            {"_id": ObjectId(flight_id)},
+            {"$set": flight.model_dump(by_alias=True, exclude={"id"})},
+        )
         return await self.get_flight(flight_id)
 
     async def delete_flight(self, flight_id: MongoId) -> bool:
-        result = await self._flights.delete_one({"_id": flight_id})
+        result = await self._flights.delete_one({"_id": ObjectId(flight_id)})
         return result.deleted_count > 0
 
     async def delete_flight_by_code(self, flight_code: str) -> bool:

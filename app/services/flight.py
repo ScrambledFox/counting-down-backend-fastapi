@@ -157,5 +157,9 @@ class FlightService:
         flights = await self._flights.list_active_flights()
         for flight in flights:
             if flight.arrival_at < now:
-                flight.status = FlightStatus.EXPIRED
-                await self._flights.update_flight((str(flight.id)), flight)
+                if flight.id is None:
+                    continue
+                expired_flight = flight.model_copy(
+                    update={"status": FlightStatus.EXPIRED, "updated_at": now}
+                )
+                await self._flights.update_flight(flight.id, expired_flight)
