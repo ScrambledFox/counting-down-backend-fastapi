@@ -16,7 +16,7 @@ logger = logging.get_logger(__name__)
 async def require_session(
     auth_service: Annotated[AuthService, Depends()],
     x_session_id: str | None = Security(session_id_header),
-    session_id: str | None = Cookie(default=None),
+    session_cookie_id: str | None = Cookie(default=None, alias="session_id"),
 ) -> SessionResponse:
     """Dependency to require a valid session.
 
@@ -31,7 +31,7 @@ async def require_session(
          - created_at: datetime
          - expires_at: datetime
     """
-    sid = session_id or x_session_id
+    sid = session_cookie_id or x_session_id
     if not sid:
         raise UnauthorizedException("No session provided")
     try:

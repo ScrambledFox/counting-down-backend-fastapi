@@ -59,7 +59,9 @@ async def get_advent_items_by_day(
 
 
 @router.get("/{id}", summary="Get Advent Item by ID", response_model=Advent | None)
-async def get_advent_item_by_id(id: str, advent_service: AdventServiceDep) -> Advent | None:
+async def get_advent_item_by_id(
+    id: str, advent_service: AdventServiceDep, _: SessionResponse = Depends(require_session)
+) -> Advent | None:
     return await advent_service.get_advent_by_id(id)
 
 
@@ -80,6 +82,8 @@ async def create_advent_item(
 
 
 @router.delete("/{id}", summary="Delete Advent Item by ID")
-async def delete_advent_item_by_id(id: str, advent_service: AdventServiceDep) -> dict[str, str]:
+async def delete_advent_item_by_id(
+    id: str, advent_service: AdventServiceDep, _: SessionResponse = Depends(require_session)
+) -> dict[str, str]:
     await advent_service.delete_advent_by_id(id)
     return {"detail": f"Advent item with ID {id} has been deleted"}

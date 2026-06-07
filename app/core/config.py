@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     advent_collection_name: str = "advents"
     sessions_collection_name: str = "sessions"
     image_metadata_collection_name: str = "images"
+    mediation_sessions_collection_name: str = "mediation_sessions"
+    mediation_perspectives_collection_name: str = "mediation_perspectives"
+    mediation_ai_reflections_collection_name: str = "mediation_ai_reflections"
+    mediation_advices_collection_name: str = "mediation_advices"
+    mediation_comments_collection_name: str = "mediation_comments"
+    mediation_moderation_results_collection_name: str = "mediation_moderation_results"
+    mediation_ai_jobs_collection_name: str = "mediation_ai_jobs"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
@@ -39,6 +46,13 @@ class Settings(BaseSettings):
     access_key_danfeng: str | None = None
     access_key_joris: str | None = None
     session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
+
+    openai_api_key: str | None = None
+    openai_model_mediation: str = "gpt-5"
+    openai_model_moderation: str = "omni-moderation-latest"
+    mediation_worker_enabled: bool = False
+    mediation_worker_poll_interval_seconds: float = 2.0
+    mediation_job_processing_timeout_seconds: float = 300.0
 
     aws_region: str = "eu-west-1"
     aws_s3_bucket: str = "my-app-bucket"
@@ -88,7 +102,7 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def require_access_keys_in_production(self) -> "Settings":
+    def require_access_keys_in_production(self) -> Settings:
         if self.app_env.lower() == "prod":
             missing: list[str] = []
             if not self.access_key_danfeng:
