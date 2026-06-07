@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,10 @@ from app.api.v1 import router as v1_api_router
 from app.api.v1.error_handlers import register_exception_handlers
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
+from app.db.mongo_client import get_db
+from app.repositories.mediation import ensure_mediation_indexes
 from app.schemas.v1.health import HealthResponse
+from app.workers.mediation_worker import run_mediation_worker
 
 settings = get_settings()
 
@@ -17,10 +21,22 @@ settings = get_settings()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = setup_logging()
     logger.info("Application startup")
-    # -- Startup code can go here
+
+    await ensure_mediation_indexes(get_db())
+    worker_stop_event: asyncio.Event | None = None
+    worker_task: asyncio.Task[None] | None = None
+
+    if settings.mediation_worker_enabled:
+        worker_stop_event = asyncio.Event()
+        worker_task = asyncio.create_task(run_mediation_worker(worker_stop_event))
     try:
         yield
     finally:
+        if worker_stop_event:
+            worker_stop_event.set()
+        if worker_task:
+            worker_task.cancel()
+
         logger.info("Application shutdown")
 
 

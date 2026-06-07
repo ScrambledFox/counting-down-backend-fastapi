@@ -145,6 +145,7 @@ async def create_image_metadata(
     image_meta: Annotated[ImageMetadataCreate, Depends(_parse_image_metadata_form)],
     img_service: ImageServiceDependency,
     image: UploadFile = File(...),
+    _: SessionResponse = Depends(require_session),
 ) -> ImageMetadataResponse:
     item = await img_service.create_image(image_meta, image)
 

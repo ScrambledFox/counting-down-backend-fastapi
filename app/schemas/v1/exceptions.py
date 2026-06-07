@@ -24,6 +24,13 @@ class ForbiddenException(HTTPException):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
+class ConflictException(HTTPException):
+    """409 Exception raised when the requested state transition is not allowed."""
+
+    def __init__(self, detail: str = "Conflict"):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 class NotFoundException(HTTPException):
     """404 Exception raised when a todo item is not found."""
 
