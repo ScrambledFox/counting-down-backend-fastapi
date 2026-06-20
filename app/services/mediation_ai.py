@@ -279,8 +279,6 @@ class MediationAIService:
             safety_identifier=f"mediation:{job.session_id}:shared",
         )
         content = SharedMediationAdviceOutput.model_validate(result.parsed)
-        decision = await self._safety.moderate_ai_output(content.model_dump_json())
-        await self._block_if_output_unsafe(job, decision)
         moderation = await self._persist_output_moderation(
             output_text=content.model_dump_json(),
             entity_type=MediationEntityType.AI_ADVICE,
