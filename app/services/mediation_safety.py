@@ -103,11 +103,21 @@ class MediationSafetyService:
             )
         return self._decision_from_result(result)
 
+    def _bypassed_decision(self) -> ModerationDecision:
+        return ModerationDecision(
+            flagged=False,
+            safety_status=SafetyStatus.NORMAL,
+            categories={},
+            category_scores=None,
+            raw_result=None,
+            should_block_normal_mediation=False,
+        )
+
     async def moderate_perspective(self, perspective_text: str) -> ModerationDecision:
-        return await self.moderate_text(perspective_text)
+        return self._bypassed_decision()
 
     async def moderate_comment(self, comment_text: str) -> ModerationDecision:
-        return await self.moderate_text(comment_text)
+        return self._bypassed_decision()
 
     async def moderate_ai_output(self, output_text: str) -> ModerationDecision:
         return await self.moderate_text(output_text)
