@@ -9,8 +9,11 @@ from fastapi import Depends
 
 from app.core.config import get_settings
 from app.db.mongo_client import AsyncDB, get_test_db
+from app.repositories.airport import AirportRepository
 from app.repositories.todo import TodoRepository
+from app.schemas.v1.airport import Airport, AirportCreate
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
+from app.services.airport import AirportService
 from app.services.todo import TodoService
 
 settings = get_settings()
@@ -103,3 +106,100 @@ def sample_todo_update() -> TodoUpdate:
     return TodoUpdate(
         title="Updated Todo",
     )
+
+
+# Airport unit test fixtures (with mocks)
+@pytest.fixture
+def airport_repository_mock():
+    return AsyncMock(spec=AirportRepository)
+
+
+@pytest.fixture
+def airport_service_mock(airport_repository_mock: AirportRepository):
+    """Service with mocked repository for unit tests."""
+    return AirportService(repo=airport_repository_mock)
+
+
+# Airport integration test fixtures (real database)
+@pytest_asyncio.fixture
+async def airport_test_db() -> AsyncGenerator[AsyncDB]:
+    """Real database connection for airport integration tests."""
+    db = get_test_db()
+    collection = db[settings.airports_collection_name]
+    await collection.delete_many({})
+    yield db
+    await collection.delete_many({})
+
+
+@pytest_asyncio.fixture
+async def airport_repository_real(airport_test_db: Annotated[AsyncDB, Depends(get_test_db)]):
+    return AirportRepository(db=airport_test_db)
+
+
+@pytest_asyncio.fixture
+async def airport_service_real(airport_repository_real: Annotated[AirportRepository, Depends()]):
+    return AirportService(repo=airport_repository_real)
+
+
+@pytest.fixture
+def sample_airport_creates() -> list[AirportCreate]:
+    return [
+        AirportCreate(
+            icao="EHAM",
+            iata="AMS",
+            name="Amsterdam Airport Schiphol",
+            city="Amsterdam",
+            country="Netherlands",
+            longitude=4.76389,
+            latitude=52.3086,
+        ),
+        AirportCreate(
+            icao="KJFK",
+            iata="JFK",
+            name="John F Kennedy International Airport",
+            city="New York",
+            country="United States",
+            longitude=-73.778692,
+            latitude=40.639928,
+        ),
+        AirportCreate(
+            icao="EGLL",
+            iata="LHR",
+            name="London Heathrow Airport",
+            city="London",
+            country="United Kingdom",
+            longitude=-0.461941,
+            latitude=51.4706,
+        ),
+    ]
+
+
+@pytest.fixture
+def sample_airports() -> list[Airport]:
+    base = datetime.fromisoformat("2024-07-01T12:00:00Z")
+    return [
+        Airport(
+            id="64a7f0c2f1d2c4b5a6e7d901",
+            icao="EHAM",
+            iata="AMS",
+            name="Amsterdam Airport Schiphol",
+            city="Amsterdam",
+            country="Netherlands",
+            longitude=4.76389,
+            latitude=52.3086,
+            created_at=base,
+            updated_at=None,
+        ),
+        Airport(
+            id="64a7f0c2f1d2c4b5a6e7d902",
+            icao="KJFK",
+            iata="JFK",
+            name="John F Kennedy International Airport",
+            city="New York",
+            country="United States",
+            longitude=-73.778692,
+            latitude=40.639928,
+            created_at=base,
+            updated_at=None,
+        ),
+    ]
