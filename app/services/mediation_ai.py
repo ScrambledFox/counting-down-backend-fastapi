@@ -164,9 +164,7 @@ class MediationAIService:
             await self._sessions.set_safety_status(job.session_id, SafetyStatus.BLOCKED)
             return
 
-        locked = await self._perspectives.lock_perspective(
-            str(perspective.id), str(moderation.id)
-        )
+        locked = await self._perspectives.lock_perspective(str(perspective.id), str(moderation.id))
         if not locked:
             return
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, StringConstraints, field_validator
+from pydantic import AfterValidator, Field, StringConstraints, field_validator
 
 from app.schemas.v1.base import CustomModel, DefaultMongoIdField
 
@@ -75,3 +75,20 @@ class Airport(AirportBase):
 
 class AirportCreate(AirportBase):
     pass
+
+
+class AirportSearchRequest(CustomModel):
+    query: str
+    k: int = Field(default=10, ge=1, le=100, description="Maximum number of results to return")
+
+    @field_validator("query")
+    def not_empty(cls, v: str) -> str:
+        v2 = v.strip()
+        if not v2:
+            raise ValueError("Must not be empty or whitespace")
+        return v2
+
+
+class AirportSearchResponse(CustomModel):
+    results: list[Airport]
+    count: int
