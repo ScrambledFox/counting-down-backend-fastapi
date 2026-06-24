@@ -1,10 +1,17 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Query
 
 from app.api.routing import make_router
 from app.core.auth import require_session
-from app.schemas.v1.airport import Airport, AirportCode, AirportCreate, IataCode
+from app.schemas.v1.airport import (
+    Airport,
+    AirportCode,
+    AirportCreate,
+    AirportSearchRequest,
+    AirportSearchResponse,
+    IataCode,
+)
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.flight import Flight
@@ -26,8 +33,10 @@ async def list_airports(airport_service: AirportServiceDep) -> list[Airport]:
 @router.get(
     "/search", summary="Search airports by name or city", dependencies=[Depends(require_session)]
 )
-async def search_airports(query: str, airport_service: AirportServiceDep) -> list[Airport]:
-    return await airport_service.search_airports(query)
+async def search_airports(
+    request: Annotated[AirportSearchRequest, Query()], airport_service: AirportServiceDep
+) -> AirportSearchResponse:
+    return await airport_service.search_airports(request)
 
 
 @router.get(
