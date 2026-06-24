@@ -9,7 +9,12 @@ from app.api.v1.airport import (
     list_airports,
     search_airports,
 )
-from app.schemas.v1.airport import Airport, AirportCreate
+from app.schemas.v1.airport import (
+    Airport,
+    AirportCreate,
+    AirportSearchRequest,
+    AirportSearchResponse,
+)
 from app.schemas.v1.exceptions import NotFoundException
 from app.services.airport import AirportService
 
@@ -30,12 +35,14 @@ class TestAirportRoutes:
     @pytest.mark.asyncio
     async def test_search_airports(self, sample_airports: list[Airport]):
         mock_service = Mock(spec=AirportService)
-        mock_service.search_airports = AsyncMock(return_value=sample_airports[:1])
+        response = AirportSearchResponse(results=sample_airports[:1], count=1)
+        mock_service.search_airports = AsyncMock(return_value=response)
 
-        result = await search_airports(query="amsterdam", airport_service=mock_service)
+        request = AirportSearchRequest(query="amsterdam")
+        result = await search_airports(request=request, airport_service=mock_service)
 
-        assert result == sample_airports[:1]
-        mock_service.search_airports.assert_called_once_with("amsterdam")
+        assert result == response
+        mock_service.search_airports.assert_called_once_with(request)
 
     @pytest.mark.asyncio
     async def test_get_airport_by_code_success(self, sample_airports: list[Airport]):
@@ -85,9 +92,9 @@ class TestAirportService:
         self, airport_service_mock: AirportService, airport_repository_mock: Mock
     ):
         airport_repository_mock.search_airports.return_value = []
-        result = await airport_service_mock.search_airports("ams")
-        assert result == []
-        airport_repository_mock.search_airports.assert_called_once_with("ams")
+        result = await airport_service_mock.search_airports(AirportSearchRequest(query="ams"))
+        assert result == AirportSearchResponse(results=[], count=0)
+        airport_repository_mock.search_airports.assert_called_once_with("ams", 10)
 
     @pytest.mark.asyncio
     async def test_get_by_code_uppercases(

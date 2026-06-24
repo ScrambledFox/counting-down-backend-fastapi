@@ -2,7 +2,7 @@ import pytest
 from pymongo.errors import DuplicateKeyError
 
 from app.repositories.airport import AirportRepository, ensure_airport_indexes
-from app.schemas.v1.airport import AirportCreate
+from app.schemas.v1.airport import AirportCreate, AirportSearchRequest
 from app.services.airport import AirportService
 from app.util.time import utc_now
 
@@ -10,6 +10,11 @@ from app.util.time import utc_now
 async def _seed(service: AirportService, creates: list[AirportCreate]) -> None:
     for create in creates:
         await service.add_airport(create)
+
+
+async def _search_icaos(service: AirportService, query: str) -> set[str]:
+    response = await service.search_airports(AirportSearchRequest(query=query))
+    return {a.icao for a in response.results}
 
 
 class TestAirportSearch_Integration:
@@ -22,15 +27,15 @@ class TestAirportSearch_Integration:
         await _seed(airport_service_real, sample_airport_creates)
 
         # by name
-        assert {a.icao for a in await airport_service_real.search_airports("Schiphol")} == {"EHAM"}
+        assert await _search_icaos(airport_service_real, "Schiphol") == {"EHAM"}
         # by city
-        assert {a.icao for a in await airport_service_real.search_airports("new york")} == {"KJFK"}
+        assert await _search_icaos(airport_service_real, "new york") == {"KJFK"}
         # by country
-        assert {a.icao for a in await airport_service_real.search_airports("Kingdom")} == {"EGLL"}
+        assert await _search_icaos(airport_service_real, "Kingdom") == {"EGLL"}
         # by iata (case-insensitive)
-        assert {a.icao for a in await airport_service_real.search_airports("ams")} == {"EHAM"}
+        assert await _search_icaos(airport_service_real, "ams") == {"EHAM"}
         # by icao
-        assert {a.icao for a in await airport_service_real.search_airports("kjfk")} == {"KJFK"}
+        assert await _search_icaos(airport_service_real, "kjfk") == {"KJFK"}
 
     @pytest.mark.asyncio
     async def test_search_no_match(
@@ -39,7 +44,11 @@ class TestAirportSearch_Integration:
         sample_airport_creates: list[AirportCreate],
     ):
         await _seed(airport_service_real, sample_airport_creates)
-        assert await airport_service_real.search_airports("nowhere-xyz") == []
+        response = await airport_service_real.search_airports(
+            AirportSearchRequest(query="nowhere-xyz")
+        )
+        assert response.results == []
+        assert response.count == 0
 
     @pytest.mark.asyncio
     async def test_get_airport_by_code_icao_and_iata(

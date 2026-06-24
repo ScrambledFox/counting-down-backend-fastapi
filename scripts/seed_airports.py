@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from app.core.config import get_settings
+from app.core.logging import get_logger, setup_logging
 from app.db.mongo_client import get_db
 from app.repositories.airport import ensure_airport_indexes
 from app.schemas.v1.airport import AirportCreate
@@ -21,8 +22,12 @@ from app.util.time import utc_now
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "app" / "data" / "airports.json"
 
+logger = get_logger(__name__)
+
 
 async def main() -> None:
+    setup_logging()
+
     parser = argparse.ArgumentParser(description="Seed airports from the bundled dataset.")
     parser.add_argument(
         "--data-file",
@@ -32,23 +37,31 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
+    logger.info("Starting airport seed")
     settings = get_settings()
     db = get_db()
+
+    logger.info("Ensuring airport indexes on collection '%s'", settings.airports_collection_name)
     await ensure_airport_indexes(db)
     collection = db[settings.airports_collection_name]
 
+    logger.info("Loading dataset from %s", args.data_file)
     rows = json.loads(args.data_file.read_text(encoding="utf-8"))
+    logger.info("Loaded %d row(s); beginning upserts", len(rows))
 
     now = utc_now()
     inserted = 0
     skipped = 0
     invalid = 0
+    processed = 0
+    total = len(rows)
     for row in rows:
+        processed += 1
         try:
             airport = AirportCreate.model_validate(row)
         except Exception as exc:  # noqa: BLE001 - report and continue seeding
             invalid += 1
-            print(f"Skipping invalid row {row.get('icao', '?')}: {exc}")
+            logger.warning("Skipping invalid row %s: %s", row.get("icao", "?"), exc)
             continue
 
         result = await collection.update_one(
@@ -58,12 +71,27 @@ async def main() -> None:
         )
         if result.upserted_id is not None:
             inserted += 1
+            logger.debug("Inserted airport %s", airport.icao)
         else:
             skipped += 1
+            logger.debug("Skipped existing airport %s", airport.icao)
 
-    print(
-        f"Seed complete: inserted={inserted}, skipped(existing)={skipped}, "
-        f"invalid={invalid}, total={len(rows)}"
+        if processed % 100 == 0 or processed == total:
+            logger.info(
+                "Progress: %d/%d processed (inserted=%d, skipped=%d, invalid=%d)",
+                processed,
+                total,
+                inserted,
+                skipped,
+                invalid,
+            )
+
+    logger.info(
+        "Seed complete: inserted=%d, skipped(existing)=%d, invalid=%d, total=%d",
+        inserted,
+        skipped,
+        invalid,
+        total,
     )
 
 

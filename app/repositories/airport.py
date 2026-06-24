@@ -29,21 +29,25 @@ class AirportRepository:
         docs = await cursor.to_list(length=None)
         return [Airport.model_validate(doc) for doc in docs]
 
-    async def search_airports(self, query: str) -> list[Airport]:
+    async def search_airports(self, query: str, limit: int = 10) -> list[Airport]:
         # Escape the query so codes / punctuation are matched literally.
         pattern = re.escape(query)
-        cursor = self._collection.find(
-            {
-                "$or": [
-                    {"icao": {"$regex": pattern, "$options": "i"}},
-                    {"iata": {"$regex": pattern, "$options": "i"}},
-                    {"name": {"$regex": pattern, "$options": "i"}},
-                    {"city": {"$regex": pattern, "$options": "i"}},
-                    {"country": {"$regex": pattern, "$options": "i"}},
-                ]
-            }
-        ).sort("icao", 1)
-        docs = await cursor.to_list(length=None)
+        cursor = (
+            self._collection.find(
+                {
+                    "$or": [
+                        {"icao": {"$regex": pattern, "$options": "i"}},
+                        {"iata": {"$regex": pattern, "$options": "i"}},
+                        {"name": {"$regex": pattern, "$options": "i"}},
+                        {"city": {"$regex": pattern, "$options": "i"}},
+                        {"country": {"$regex": pattern, "$options": "i"}},
+                    ]
+                }
+            )
+            .sort("icao", 1)
+            .limit(limit)
+        )
+        docs = await cursor.to_list(length=limit)
         return [Airport.model_validate(doc) for doc in docs]
 
     async def get_airport_by_id(self, airport_id: MongoId) -> Airport | None:
