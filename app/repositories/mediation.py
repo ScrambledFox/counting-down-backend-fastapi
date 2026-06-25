@@ -254,9 +254,7 @@ class MediationAIRepository:
         )
         await self._advices.create_index([("session_id", ASCENDING), ("created_at", DESCENDING)])
 
-    async def insert_reflection(
-        self, reflection: MediationAIReflection
-    ) -> MediationAIReflection:
+    async def insert_reflection(self, reflection: MediationAIReflection) -> MediationAIReflection:
         result = await self._reflections.insert_one(reflection.serialize())
         doc = await self._reflections.find_one({"_id": result.inserted_id})
         return MediationAIReflection.model_validate(doc)
