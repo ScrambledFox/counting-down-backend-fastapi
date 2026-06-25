@@ -37,3 +37,10 @@ class NotFoundException(HTTPException):
     def __init__(self, type_name: str, item_id: Any | None = None):
         detail = f"'{type_name}' '{item_id}' not found" if item_id else "Item not found"
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+
+
+class ServiceUnavailableException(HTTPException):
+    """503 raised when an upstream service is unavailable."""
+
+    def __init__(self, detail: str = "An upstream service is unavailable"):
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
