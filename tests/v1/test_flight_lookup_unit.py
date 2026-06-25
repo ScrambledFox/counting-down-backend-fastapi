@@ -1,5 +1,6 @@
 """Unit tests for flight lookup service and route."""
 
+import math
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -209,7 +210,9 @@ class TestLookupFlightService:
             await lookup_flight("KL123")
             # Manually expire the cache entry
             key = list(flight_lookup_module._cache.keys())[0]
-            flight_lookup_module._cache[key] = (0.0, flight_lookup_module._cache[key][1])
+            # Use -inf so the cache entry is guaranteed older than any TTL,
+            # regardless of how long time.monotonic() has been running.
+            flight_lookup_module._cache[key] = (-math.inf, flight_lookup_module._cache[key][1])
             await lookup_flight("KL123")
 
         assert mock_client.call_count == 2
@@ -224,7 +227,9 @@ class TestLookupFlightService:
         ) as mock_client:
             await lookup_flight("KL999")
             key = list(flight_lookup_module._cache.keys())[0]
-            flight_lookup_module._cache[key] = (0.0, flight_lookup_module._cache[key][1])
+            # Use -inf so the cache entry is guaranteed older than any TTL,
+            # regardless of how long time.monotonic() has been running.
+            flight_lookup_module._cache[key] = (-math.inf, flight_lookup_module._cache[key][1])
             await lookup_flight("KL999")
 
         assert mock_client.call_count == 2
