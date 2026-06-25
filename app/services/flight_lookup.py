@@ -36,6 +36,19 @@ def _make_candidate_id(
     return hashlib.sha1(key.encode()).hexdigest()[:16]
 
 
+def _coerce_iso(value: str | None) -> str | None:
+    # AeroDataBox returns timestamps like "2025-06-25 06:50Z"; date-fns parseISO
+    # requires a T separator, so promote the first space to T.
+    if not value:
+        return None
+    return value.replace(" ", "T", 1)
+
+
+def _scheduled(node: dict, key: str) -> str | None:
+    scheduled_time = node.get("scheduledTime") or {}
+    return _coerce_iso(scheduled_time.get(key))
+
+
 def _normalize_candidate(raw: dict) -> FlightLookupCandidate:
     dep = raw.get("departure") or {}
     arr = raw.get("arrival") or {}
@@ -59,7 +72,7 @@ def _normalize_candidate(raw: dict) -> FlightLookupCandidate:
     )
 
     flight_number = (raw.get("number") or "").upper()
-    dep_time_utc = dep.get("scheduledTimeUtc")
+    dep_time_utc = _scheduled(dep, "utc")
 
     return FlightLookupCandidate(
         id=_make_candidate_id(flight_number, departure_airport.iata, arrival_airport.iata, dep_time_utc),
@@ -68,21 +81,30 @@ def _normalize_candidate(raw: dict) -> FlightLookupCandidate:
         airline_code=airline.get("iata"),
         departure_airport=departure_airport,
         arrival_airport=arrival_airport,
-        scheduled_departure_time_local=dep.get("scheduledTimeLocal"),
-        scheduled_arrival_time_local=arr.get("scheduledTimeLocal"),
+        scheduled_departure_time_local=_scheduled(dep, "local"),
+        scheduled_arrival_time_local=_scheduled(arr, "local"),
         scheduled_departure_time_utc=dep_time_utc,
-        scheduled_arrival_time_utc=arr.get("scheduledTimeUtc"),
+        scheduled_arrival_time_utc=_scheduled(arr, "utc"),
         status=raw.get("status"),
     )
 
 
-async def lookup_flight(raw_flight_number: str) -> FlightLookupResponse:
-    """Validate, cache-check, call AeroDataBox, normalize, and cache the result."""
+async def lookup_flight(raw_flight_number: str, on_date: date | None = None) -> FlightLookupResponse:
+    """Validate, cache-check, call AeroDataBox, normalize, and cache the result.
+
+    When `on_date` is provided, the AeroDataBox window is narrowed to that single
+    day — useful when adding flights far in advance, since the default 7-day
+    window only ever surfaces flights leaving in the next week.
+    """
     normalized = normalize_flight_number(raw_flight_number)
 
-    today = date.today()
-    date_to = today + timedelta(days=settings.aerodatabox_lookup_window_days)
-    date_from_str = today.isoformat()
+    if on_date is not None:
+        date_from = on_date
+        date_to = on_date + timedelta(days=1)
+    else:
+        date_from = date.today()
+        date_to = date_from + timedelta(days=settings.aerodatabox_lookup_window_days)
+    date_from_str = date_from.isoformat()
     date_to_str = date_to.isoformat()
     window_key = f"{date_from_str}:{date_to_str}"
     cache_key = (normalized, window_key)

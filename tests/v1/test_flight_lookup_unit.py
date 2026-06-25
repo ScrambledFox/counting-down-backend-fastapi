@@ -26,8 +26,10 @@ SAMPLE_RAW_FLIGHT: dict = {
             "municipalityName": "Amsterdam",
             "countryCode": "NL",
         },
-        "scheduledTimeLocal": "2026-06-25T12:30:00+02:00",
-        "scheduledTimeUtc": "2026-06-25T10:30:00Z",
+        "scheduledTime": {
+            "local": "2026-06-25 12:30+02:00",
+            "utc": "2026-06-25 10:30Z",
+        },
     },
     "arrival": {
         "airport": {
@@ -37,8 +39,10 @@ SAMPLE_RAW_FLIGHT: dict = {
             "municipalityName": "London",
             "countryCode": "GB",
         },
-        "scheduledTimeLocal": "2026-06-25T12:50:00+01:00",
-        "scheduledTimeUtc": "2026-06-25T11:50:00Z",
+        "scheduledTime": {
+            "local": "2026-06-25 12:50+01:00",
+            "utc": "2026-06-25 11:50Z",
+        },
     },
 }
 
@@ -253,8 +257,8 @@ class TestLookupFlightService:
         assert c.departure_airport.icao == "EHAM"
         assert c.arrival_airport.iata == "LHR"
         assert c.airline_name == "KLM Royal Dutch Airlines"
-        assert c.scheduled_departure_time_local == "2026-06-25T12:30:00+02:00"
-        assert c.scheduled_departure_time_utc == "2026-06-25T10:30:00Z"
+        assert c.scheduled_departure_time_local == "2026-06-25T12:30+02:00"
+        assert c.scheduled_departure_time_utc == "2026-06-25T10:30Z"
         assert c.status == "Scheduled"
         assert c.source == "AeroDataBox"
 
