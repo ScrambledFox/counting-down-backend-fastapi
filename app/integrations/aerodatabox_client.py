@@ -60,7 +60,9 @@ class AeroDataBoxClient:
             logger.warning("AeroDataBox request timed out for flight %s", flight_number)
             raise AeroDataBoxError("Flight data service timed out") from exc
         except httpx.RequestError as exc:
-            logger.warning("AeroDataBox request error for flight %s: %s", flight_number, type(exc).__name__)
+            logger.warning(
+                "AeroDataBox request error for flight %s: %s", flight_number, type(exc).__name__
+            )
             raise AeroDataBoxError("Flight data service is unavailable") from exc
 
         # 404 means no flights found for that number/range — treat as empty, not an error
@@ -69,7 +71,9 @@ class AeroDataBoxClient:
 
         if response.status_code in (401, 403):
             logger.error("AeroDataBox authentication failed (status %d)", response.status_code)
-            raise AeroDataBoxError("Flight data service authentication failed", response.status_code)
+            raise AeroDataBoxError(
+                "Flight data service authentication failed", response.status_code
+            )
 
         if response.status_code == 429:
             logger.warning("AeroDataBox rate limit exceeded")

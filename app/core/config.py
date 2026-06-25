@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     aerodatabox_api_host: str = "aerodatabox.p.rapidapi.com"
     aerodatabox_timeout_seconds: float = 10.0
     aerodatabox_lookup_window_days: int = 7
-    aerodatabox_cache_ttl_success_seconds: int = 21_600   # 6 h
+    aerodatabox_cache_ttl_success_seconds: int = 21_600  # 6 h
     aerodatabox_cache_ttl_no_results_seconds: int = 1_800  # 30 min
 
     default_page_size: int = 20
@@ -111,7 +111,7 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def require_access_keys_in_production(self) -> "Settings":
+    def require_access_keys_in_production(self) -> Settings:
         if self.app_env.lower() == "prod":
             missing: list[str] = []
             if not self.access_key_danfeng:

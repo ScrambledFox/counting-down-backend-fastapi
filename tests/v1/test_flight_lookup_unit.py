@@ -1,4 +1,5 @@
 """Unit tests for flight lookup service and route."""
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -285,6 +286,10 @@ class TestLookupFlightRoute:
             cached=False,
             candidates=[],
         )
-        with patch("app.api.v1.flight_lookup.lookup_flight", new_callable=AsyncMock, return_value=expected):
+        with patch(
+            "app.api.v1.flight_lookup.lookup_flight",
+            new_callable=AsyncMock,
+            return_value=expected,
+        ):
             result = await lookup_flight_route(flightNumber="KL123", _session=None)
         assert result == expected

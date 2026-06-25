@@ -261,9 +261,7 @@ async def test_perspective_moderation_job_locks_and_creates_private_reflection_j
     await service.moderate_perspective_submission(job)
 
     repos["safety"].moderate_perspective.assert_awaited_once()
-    repos["perspectives"].lock_perspective.assert_awaited_once_with(
-        PERSPECTIVE_ID, MODERATION_ID
-    )
+    repos["perspectives"].lock_perspective.assert_awaited_once_with(PERSPECTIVE_ID, MODERATION_ID)
     repos["sessions"].set_status.assert_awaited_once_with(
         SESSION_ID, MediationSessionStatus.PARTIAL_PERSPECTIVE_SUBMITTED
     )
@@ -329,9 +327,7 @@ async def test_perspective_moderation_job_blocks_unsafe_perspective() -> None:
     await service.moderate_perspective_submission(job)
 
     repos["perspectives"].mark_flagged.assert_awaited_once_with(PERSPECTIVE_ID, MODERATION_ID)
-    repos["sessions"].set_safety_status.assert_awaited_once_with(
-        SESSION_ID, SafetyStatus.BLOCKED
-    )
+    repos["sessions"].set_safety_status.assert_awaited_once_with(SESSION_ID, SafetyStatus.BLOCKED)
     repos["jobs"].create_job_if_not_exists.assert_not_called()
 
 

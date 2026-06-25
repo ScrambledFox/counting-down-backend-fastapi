@@ -6,7 +6,11 @@ from datetime import date, timedelta
 from app.core.config import get_settings
 from app.integrations.aerodatabox_client import AeroDataBoxError, RawFlightData, aerodatabox_client
 from app.schemas.v1.exceptions import BadRequestException, ServiceUnavailableException
-from app.schemas.v1.flight_lookup import FlightLookupAirport, FlightLookupCandidate, FlightLookupResponse
+from app.schemas.v1.flight_lookup import (
+    FlightLookupAirport,
+    FlightLookupCandidate,
+    FlightLookupResponse,
+)
 
 settings = get_settings()
 
@@ -17,7 +21,7 @@ _FLIGHT_NUMBER_RE = re.compile(r"^[A-Z]{2,3}\d+$")
 
 
 def normalize_flight_number(raw: str) -> str:
-    """Strip, uppercase, and remove internal spaces. Reject invalid values with BadRequestException."""
+    """Strip, uppercase, remove internal spaces. Reject invalid values with BadRequestException."""
     stripped = raw.strip().upper().replace(" ", "").replace("-", "")
     if len(stripped) < 2:
         raise BadRequestException("Flight number is too short")
@@ -73,9 +77,12 @@ def _normalize_candidate(raw: dict) -> FlightLookupCandidate:
 
     flight_number = (raw.get("number") or "").upper()
     dep_time_utc = _scheduled(dep, "utc")
+    candidate_id = _make_candidate_id(
+        flight_number, departure_airport.iata, arrival_airport.iata, dep_time_utc
+    )
 
     return FlightLookupCandidate(
-        id=_make_candidate_id(flight_number, departure_airport.iata, arrival_airport.iata, dep_time_utc),
+        id=candidate_id,
         flight_number=flight_number,
         airline_name=airline.get("name"),
         airline_code=airline.get("iata"),
@@ -89,7 +96,9 @@ def _normalize_candidate(raw: dict) -> FlightLookupCandidate:
     )
 
 
-async def lookup_flight(raw_flight_number: str, on_date: date | None = None) -> FlightLookupResponse:
+async def lookup_flight(
+    raw_flight_number: str, on_date: date | None = None
+) -> FlightLookupResponse:
     """Validate, cache-check, call AeroDataBox, normalize, and cache the result.
 
     When `on_date` is provided, the AeroDataBox window is narrowed to that single
