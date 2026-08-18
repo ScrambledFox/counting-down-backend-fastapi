@@ -7,8 +7,12 @@ from app.api.v1.mediation import create_mediation_session
 from app.schemas.v1.exceptions import ConflictException
 from app.schemas.v1.mediation import (
     AIJobStatus,
+    MediationAIAuthorType,
     MediationAIJob,
     MediationAIJobType,
+    MediationAuthorType,
+    MediationComment,
+    MediationCommentCreate,
     MediationModerationResult,
     MediationPerspective,
     MediationPerspectiveDraftUpdate,
@@ -167,6 +171,34 @@ async def test_route_uses_session_user_type_when_creating_mediation_session() ->
 
     assert result == expected
     service.create_session.assert_awaited_once_with(UserType.DANFENG, payload)
+
+
+@pytest.mark.asyncio
+async def test_session_detail_never_returns_partner_private_perspective() -> None:
+    service, repos = make_service()
+    my_perspective = make_perspective()
+    partner_perspective = make_perspective(PerspectiveStatus.LOCKED).model_copy(
+        update={
+            "id": "64a7f0c2f1d2c4b5a6e7d8f4",
+            "user_type": UserType.DANFENG,
+            "what_happened": "Partner private account that must not leave mediation",
+        }
+    )
+    repos["sessions"].get_by_id.return_value = make_session()
+    repos["perspectives"].list_for_session.return_value = [
+        my_perspective,
+        partner_perspective,
+    ]
+    repos["ai"].get_reflection_for_user.return_value = None
+    repos["ai"].get_latest_advice.return_value = None
+    repos["jobs"].get_latest_by_type.return_value = None
+
+    detail = await service.get_session_detail(SESSION_ID, UserType.JORIS)
+
+    assert detail.my_perspective and detail.my_perspective.user_type == UserType.JORIS
+    assert detail.other_perspective_status == "SUBMITTED"
+    assert "Partner private account" not in detail.model_dump_json()
+    repos["ai"].get_reflection_for_user.assert_awaited_once_with(SESSION_ID, UserType.JORIS)
 
 
 @pytest.mark.asyncio
@@ -368,6 +400,74 @@ async def test_cannot_comment_before_advice_is_available() -> None:
         await service.list_comments(SESSION_ID, UserType.JORIS)
 
     repos["comments"].list_for_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_xiaobao_comment_is_labeled_moderated_and_does_not_queue_reply() -> None:
+    service, repos = make_service()
+    repos["sessions"].get_by_id.return_value = make_session(
+        MediationSessionStatus.AI_ADVICE_AVAILABLE
+    )
+    repos["safety"].moderate_ai_output.return_value = normal_decision()
+    repos["moderation"].insert.return_value = make_moderation()
+    repos["comments"].create_ai_comment.return_value = MediationComment(
+        id=PERSPECTIVE_ID,
+        session_id=SESSION_ID,
+        author_type=MediationAuthorType.AI,
+        ai_author_type=MediationAIAuthorType.XIAO_BAO,
+        content="A shared observation",
+        created_at=NOW,
+    )
+
+    comment = await service.create_xiaobao_comment(
+        SESSION_ID, MediationCommentCreate(content="A shared observation")
+    )
+
+    assert comment.ai_author_type == MediationAIAuthorType.XIAO_BAO
+    repos["safety"].moderate_ai_output.assert_awaited_once_with("A shared observation")
+    assert repos["comments"].create_ai_comment.await_args.kwargs["ai_author_type"] == (
+        MediationAIAuthorType.XIAO_BAO
+    )
+    repos["jobs"].create_job_if_not_exists.assert_not_called()
+    repos["sessions"].set_status.assert_awaited_once_with(
+        SESSION_ID, MediationSessionStatus.DISCUSSION_OPEN
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status",
+    [MediationSessionStatus.RESOLVED, MediationSessionStatus.ARCHIVED],
+)
+async def test_xiaobao_comment_rejects_read_only_sessions(
+    status: MediationSessionStatus,
+) -> None:
+    service, repos = make_service()
+    repos["sessions"].get_by_id.return_value = make_session(status)
+
+    with pytest.raises(ConflictException):
+        await service.create_xiaobao_comment(
+            SESSION_ID, MediationCommentCreate(content="A shared observation")
+        )
+
+    repos["safety"].moderate_ai_output.assert_not_called()
+    repos["comments"].create_ai_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_xiaobao_comment_blocked_by_output_moderation_is_not_written() -> None:
+    service, repos = make_service()
+    repos["sessions"].get_by_id.return_value = make_session(MediationSessionStatus.DISCUSSION_OPEN)
+    repos["safety"].moderate_ai_output.return_value = blocked_decision()
+    repos["moderation"].insert.return_value = make_moderation()
+
+    with pytest.raises(ConflictException):
+        await service.create_xiaobao_comment(
+            SESSION_ID, MediationCommentCreate(content="Unsafe generated output")
+        )
+
+    repos["comments"].create_ai_comment.assert_not_called()
+    repos["sessions"].set_safety_status.assert_not_called()
 
 
 @pytest.mark.asyncio

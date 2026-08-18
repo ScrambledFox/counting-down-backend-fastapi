@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     agreement_revisions_collection_name: str = "agreement_revisions"
     agreement_acceptances_collection_name: str = "agreement_acceptances"
     agreement_responses_collection_name: str = "agreement_responses"
+    relationship_profile_collection_name: str = "relationship_profile"
+    xiaobao_conversations_collection_name: str = "xiaobao_conversations"
+    xiaobao_messages_collection_name: str = "xiaobao_messages"
+    xiaobao_proposals_collection_name: str = "xiaobao_proposals"
+    xiaobao_rate_limits_collection_name: str = "xiaobao_rate_limits"
+    xiaobao_checkpoints_collection_name: str = "xiaobao_graph_checkpoints"
+    xiaobao_checkpoint_writes_collection_name: str = "xiaobao_graph_checkpoint_writes"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
@@ -57,6 +64,18 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model_mediation: str = "gpt-5"
     openai_model_moderation: str = "omni-moderation-latest"
+    openai_model_xiaobao: str = "gpt-5.6-terra"
+    xiaobao_reasoning_effort: str = "low"
+    xiaobao_max_output_tokens: int = 1200
+    xiaobao_history_message_limit: int = 20
+    xiaobao_history_character_limit: int = 20_000
+    xiaobao_mediation_session_limit: int = 10
+    xiaobao_mediation_comment_limit: int = 20
+    xiaobao_mediation_context_character_limit: int = 30_000
+    xiaobao_mediation_private_context_character_limit: int = 15_000
+    xiaobao_rate_limit_requests: int = 10
+    xiaobao_rate_limit_window_seconds: int = 300
+    xiaobao_checkpoint_ttl_seconds: int = 7 * 24 * 60 * 60
     mediation_worker_enabled: bool = False
     mediation_worker_poll_interval_seconds: float = 2.0
     mediation_job_processing_timeout_seconds: float = 300.0

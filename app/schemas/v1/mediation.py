@@ -53,6 +53,11 @@ class MediationAuthorType(str, Enum):
     AI = "AI"
 
 
+class MediationAIAuthorType(str, Enum):
+    MEDIATION_ASSISTANT = "MEDIATION_ASSISTANT"
+    XIAO_BAO = "XIAO_BAO"
+
+
 class MediationEntityType(str, Enum):
     PERSPECTIVE = "PERSPECTIVE"
     COMMENT = "COMMENT"
@@ -204,6 +209,7 @@ class MediationComment(CustomModel):
     parent_comment_id: MongoId | None = None
     author_type: MediationAuthorType
     author_user_type: UserType | None = None
+    ai_author_type: MediationAIAuthorType | None = None
     content: str
     created_at: datetime
     updated_at: datetime | None = None
