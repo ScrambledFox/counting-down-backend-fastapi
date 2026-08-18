@@ -12,6 +12,7 @@ from app.core.logging import get_logger, setup_logging
 from app.db.mongo_client import get_db
 from app.repositories.airport import ensure_airport_indexes
 from app.repositories.mediation import ensure_mediation_indexes
+from app.repositories.relationship_care import ensure_relationship_care_indexes
 from app.schemas.v1.health import HealthResponse
 from app.workers.mediation_worker import run_mediation_worker
 
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await ensure_mediation_indexes(get_db())
     await ensure_airport_indexes(get_db())
+    await ensure_relationship_care_indexes(get_db())
     worker_stop_event: asyncio.Event | None = None
     worker_task: asyncio.Task[None] | None = None
 

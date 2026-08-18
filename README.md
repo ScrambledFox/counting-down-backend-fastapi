@@ -17,6 +17,24 @@
 
 This repository contains the backend implementation of the Counting Down application (For my beautify wife Danfeng) using FastAPI. The application provides APIs to manage and retrieve flight information, todos, and messages.
 
+## Boundaries & Agreements
+
+The `/api/v1/relationship-care` API stores personal boundaries, requests, and growth goals
+alongside shared, revisioned agreements. Personal content is editable only by its owner.
+Growth goals are private by default and become visible to the partner only when their owner
+explicitly shares them. An agreement becomes active only when both authenticated users accept
+the same immutable revision; later edits create a new unaccepted revision while retaining the
+agreed history.
+
+MongoDB collections and indexes are created additively during application startup, so no
+data migration is required. Optional synthetic local examples can be loaded idempotently:
+
+```bash
+uv run python scripts/seed_relationship_care.py
+```
+
+The seed script refuses to run when `APP_ENV=prod`.
+
 ## Seeding airports
 
 Flights reference airports by their ICAO code, so the `airports` collection
@@ -81,4 +99,3 @@ The cache is process-local. Restart the server to clear it.
 - ICAO codes are not always available from AeroDataBox for smaller airports; those fields will be empty and the user must fill them manually.
 - The free AeroDataBox plan provides ~150 calls/month.
 - The cache is not shared across multiple server instances.
-
