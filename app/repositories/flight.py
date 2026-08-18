@@ -80,6 +80,16 @@ class FlightRepository:
         result = await self._flights.delete_one({"code": flight_code})
         return result.deleted_count > 0
 
+    async def count_referencing_airport(self, airport_id: MongoId) -> int:
+        return await self._flights.count_documents(
+            {
+                "$or": [
+                    {"departure_airport_id": airport_id},
+                    {"arrival_airport_id": airport_id},
+                ]
+            }
+        )
+
     async def get_flights_by_departure_airport(
         self, airport: Airport, status: FlightStatus | None = None
     ) -> list[Flight]:

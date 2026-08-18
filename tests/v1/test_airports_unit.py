@@ -15,7 +15,7 @@ from app.schemas.v1.airport import (
     AirportSearchRequest,
     AirportSearchResponse,
 )
-from app.schemas.v1.exceptions import NotFoundException
+from app.schemas.v1.exceptions import ConflictException, NotFoundException
 from app.services.airport import AirportService
 
 
@@ -121,3 +121,55 @@ class TestAirportService:
         assert created.created_at == fixed_now
         assert created.icao == airport_create.icao
         airport_repository_mock.create_airport.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_by_id_rejects_airport_used_by_flight(
+        self,
+        airport_service_mock: AirportService,
+        airport_repository_mock: Mock,
+        flight_repository_mock: Mock,
+        sample_airports: list[Airport],
+    ):
+        airport = sample_airports[0]
+        airport_repository_mock.get_airport_by_id.return_value = airport
+        flight_repository_mock.count_referencing_airport.return_value = 1
+
+        with pytest.raises(ConflictException) as exc_info:
+            await airport_service_mock.delete_airport_by_id(airport.id)
+
+        assert exc_info.value.status_code == 409
+        airport_repository_mock.delete_airport_by_id.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_by_code_checks_resolved_airport_id(
+        self,
+        airport_service_mock: AirportService,
+        airport_repository_mock: Mock,
+        flight_repository_mock: Mock,
+        sample_airports: list[Airport],
+    ):
+        airport = sample_airports[0]
+        airport_repository_mock.get_airport_by_code.return_value = airport
+        flight_repository_mock.count_referencing_airport.return_value = 0
+        airport_repository_mock.delete_airport_by_id.return_value = True
+
+        deleted = await airport_service_mock.delete_airport_by_code("eham")
+
+        assert deleted is True
+        airport_repository_mock.get_airport_by_code.assert_awaited_once_with("EHAM")
+        flight_repository_mock.count_referencing_airport.assert_awaited_once_with(airport.id)
+        airport_repository_mock.delete_airport_by_id.assert_awaited_once_with(airport.id)
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_airport_does_not_check_references(
+        self,
+        airport_service_mock: AirportService,
+        airport_repository_mock: Mock,
+        flight_repository_mock: Mock,
+    ):
+        airport_repository_mock.get_airport_by_id.return_value = None
+
+        deleted = await airport_service_mock.delete_airport_by_id("64a7f0c2f1d2c4b5a6e7d999")
+
+        assert deleted is False
+        flight_repository_mock.count_referencing_airport.assert_not_called()
