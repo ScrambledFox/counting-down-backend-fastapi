@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     mediation_comments_collection_name: str = "mediation_comments"
     mediation_moderation_results_collection_name: str = "mediation_moderation_results"
     mediation_ai_jobs_collection_name: str = "mediation_ai_jobs"
+    relationship_boundaries_collection_name: str = "relationship_boundaries"
+    relationship_requests_collection_name: str = "relationship_requests"
+    personal_goals_collection_name: str = "personal_goals"
+    relationship_agreements_collection_name: str = "relationship_agreements"
+    agreement_revisions_collection_name: str = "agreement_revisions"
+    agreement_acceptances_collection_name: str = "agreement_acceptances"
+    agreement_responses_collection_name: str = "agreement_responses"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
