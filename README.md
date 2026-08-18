@@ -35,6 +35,48 @@ uv run python scripts/seed_relationship_care.py
 
 The seed script refuses to run when `APP_ENV=prod`.
 
+## Xiao Bao (小宝)
+
+The authenticated `/api/v1/xiaobao` API provides private, owner-scoped conversations with
+streamed Responses API output. Every turn reloads an authorized subset of boundaries, wishes,
+goals, agreements, incomplete Together List items, and bounded mediation history. Mediation
+history contains lifecycle state, shared advice, and shared comments. The authenticated user's
+own perspective/reflection is available only through an on-demand runtime lookup; the partner's
+private content is never loaded. Photos, private messages, travel, and Advent records remain
+outside the context boundary.
+
+A single shared relationship profile stores the couple's usual setup, current visit state,
+locations, time zones, practical constraints, and general personality/preference notes. Both
+authenticated users can read and edit it through `GET`/`PUT /api/v1/relationship-profile`.
+Xiao Bao reloads the profile before every turn and prioritizes remote-friendly suggestions when
+the profile says the couple is long-distance and currently apart. The first-read defaults are
+editable and are not written to MongoDB until one of the users saves the profile.
+
+Xiao Bao runs a bounded LangGraph tool loop. Relationship records are supplied through runtime
+context and are not copied into graph checkpoints. Provider calls use `store=False`; application
+messages remain the source of conversation history. Human review is persisted as proposal state,
+not as a paused graph. A shared-agreement acceptance creates a private draft, and the existing
+agreement workflow remains the only way to propose it to the partner.
+
+Final replies use a strict `{content, mood}` structured envelope in the same Responses API call.
+Only decoded Markdown content is streamed to clients. The persisted nullable mood is limited to
+`IDLE`, `LOVE`, or `CONCERNED`; greeting, thinking, success, and sleep remain browser-owned states.
+
+Mediation actions are always reviewable proposals. Xiao Bao can start a session, post a moderated
+shared comment clearly authored as Xiao Bao, or save the current user's private perspective draft.
+It cannot submit a perspective, resolve a mediation, or archive one. Shared comments never use
+private mediation context and do not trigger recursive mediation-assistant replies.
+
+Set `OPENAI_API_KEY` to enable generation. The model, limits, context budget, and checkpoint TTL
+are configurable through the `XIAOBAO_*` and `OPENAI_MODEL_XIAOBAO` values documented in
+`.env.example`. MongoDB collections and indexes are added on startup without a data migration.
+
+Live-model checks are opt-in and use synthetic content:
+
+```bash
+RUN_XIAOBAO_LIVE_EVALS=1 uv run pytest -m live_ai tests/live/test_xiaobao_live.py
+```
+
 ## Seeding airports
 
 Flights reference airports by their ICAO code, so the `airports` collection

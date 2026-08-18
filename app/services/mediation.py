@@ -16,6 +16,7 @@ from app.schemas.v1.mediation import (
     AdviceEndpointResponse,
     AIJobStatus,
     CommentCreateResponse,
+    MediationAIAuthorType,
     MediationAIJob,
     MediationAIJobType,
     MediationCommentCreate,
@@ -445,6 +446,39 @@ class MediationService:
         return await self._create_comment_or_reply(
             session_id, parent_comment_id, current_user_type, payload
         )
+
+    async def create_xiaobao_comment(
+        self, session_id: MongoId, payload: MediationCommentCreate
+    ) -> MediationCommentResponse:
+        session = await self._get_session_or_404(session_id)
+        if session.status not in {
+            MediationSessionStatus.AI_ADVICE_AVAILABLE,
+            MediationSessionStatus.DISCUSSION_OPEN,
+        }:
+            raise ConflictException("Xiao Bao can comment only while discussion is open")
+        if session.safety_status == SafetyStatus.BLOCKED:
+            raise ConflictException("Session is blocked for safety review")
+
+        decision = await self._safety.moderate_ai_output(payload.content)
+        moderation = await self._persist_moderation(
+            decision=decision,
+            entity_type=MediationEntityType.AI_COMMENT,
+            entity_id=f"pending_xiaobao_comment:{session_id}",
+        )
+        if decision.should_block_normal_mediation:
+            raise ConflictException("Xiao Bao's comment could not pass the safety review")
+
+        comment = await self._comments.create_ai_comment(
+            session_id,
+            None,
+            payload.content,
+            None,
+            ai_author_type=MediationAIAuthorType.XIAO_BAO,
+            moderation_result_id=str(moderation.id) if moderation.id else None,
+        )
+        if session.status == MediationSessionStatus.AI_ADVICE_AVAILABLE:
+            await self._sessions.set_status(session_id, MediationSessionStatus.DISCUSSION_OPEN)
+        return MediationCommentResponse(**comment.model_dump())
 
     async def _create_comment_or_reply(
         self,

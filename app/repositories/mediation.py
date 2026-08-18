@@ -13,6 +13,7 @@ from app.schemas.v1.base import MongoId
 from app.schemas.v1.mediation import (
     AIJobStatus,
     MediationAdvice,
+    MediationAIAuthorType,
     MediationAIJob,
     MediationAIJobType,
     MediationAIReflection,
@@ -323,6 +324,9 @@ class MediationCommentRepository:
         parent_comment_id: MongoId | None,
         content: str,
         ai_job_id: MongoId | None,
+        *,
+        ai_author_type: MediationAIAuthorType = MediationAIAuthorType.MEDIATION_ASSISTANT,
+        moderation_result_id: MongoId | None = None,
     ) -> MediationComment:
         now = utc_now()
         comment = MediationComment(
@@ -330,8 +334,10 @@ class MediationCommentRepository:
             parent_comment_id=parent_comment_id,
             author_type=MediationAuthorType.AI,
             author_user_type=None,
+            ai_author_type=ai_author_type,
             content=content,
             created_at=now,
+            moderation_result_id=moderation_result_id,
             ai_job_id=ai_job_id,
         )
         result = await self._collection.insert_one(comment.serialize())

@@ -11,7 +11,9 @@ from app.api.v1 import (
     mediation,
     message,
     relationship_care,
+    relationship_profile,
     todo,
+    xiaobao,
 )
 
 router = APIRouter(prefix="/api/v1", route_class=NoAliasAPIRoute)
@@ -28,3 +30,7 @@ router.include_router(mediation.router, prefix="/mediation-sessions", tags=["med
 router.include_router(
     relationship_care.router, prefix="/relationship-care", tags=["relationship-care"]
 )
+router.include_router(
+    relationship_profile.router, prefix="/relationship-profile", tags=["relationship-profile"]
+)
+router.include_router(xiaobao.router, prefix="/xiaobao", tags=["xiaobao"])
