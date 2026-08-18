@@ -10,6 +10,7 @@ from fastapi import Depends
 from app.core.config import get_settings
 from app.db.mongo_client import AsyncDB, get_test_db
 from app.repositories.airport import AirportRepository
+from app.repositories.flight import FlightRepository
 from app.repositories.todo import TodoRepository
 from app.schemas.v1.airport import Airport, AirportCreate
 from app.schemas.v1.todo import Todo, TodoCreate, TodoUpdate
@@ -115,9 +116,17 @@ def airport_repository_mock():
 
 
 @pytest.fixture
-def airport_service_mock(airport_repository_mock: AirportRepository):
+def flight_repository_mock():
+    return AsyncMock(spec=FlightRepository)
+
+
+@pytest.fixture
+def airport_service_mock(
+    airport_repository_mock: AirportRepository,
+    flight_repository_mock: FlightRepository,
+):
     """Service with mocked repository for unit tests."""
-    return AirportService(repo=airport_repository_mock)
+    return AirportService(repo=airport_repository_mock, flight_repo=flight_repository_mock)
 
 
 # Airport integration test fixtures (real database)
@@ -127,8 +136,10 @@ async def airport_test_db() -> AsyncGenerator[AsyncDB]:
     db = get_test_db()
     collection = db[settings.airports_collection_name]
     await collection.delete_many({})
+    await db[settings.flights_collection_name].delete_many({})
     yield db
     await collection.delete_many({})
+    await db[settings.flights_collection_name].delete_many({})
 
 
 @pytest_asyncio.fixture
@@ -138,7 +149,10 @@ async def airport_repository_real(airport_test_db: Annotated[AsyncDB, Depends(ge
 
 @pytest_asyncio.fixture
 async def airport_service_real(airport_repository_real: Annotated[AirportRepository, Depends()]):
-    return AirportService(repo=airport_repository_real)
+    return AirportService(
+        repo=airport_repository_real,
+        flight_repo=FlightRepository(db=get_test_db()),
+    )
 
 
 @pytest.fixture
