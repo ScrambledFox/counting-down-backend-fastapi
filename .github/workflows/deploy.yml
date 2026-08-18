@@ -38,6 +38,7 @@ jobs:
         run: |
           echo "MONGO_URL=${{ secrets.MONGO_URL }}" >> .env
           echo 'MONGO_APP_NAME="test"' >> .env
+          echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> .env
 
       - name: Run tests
         run: |
