@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     xiaobao_rate_limits_collection_name: str = "xiaobao_rate_limits"
     xiaobao_checkpoints_collection_name: str = "xiaobao_graph_checkpoints"
     xiaobao_checkpoint_writes_collection_name: str = "xiaobao_graph_checkpoint_writes"
+    xiaobao_routines_collection_name: str = "xiaobao_routines"
+    xiaobao_routine_runs_collection_name: str = "xiaobao_routine_runs"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
@@ -76,6 +78,13 @@ class Settings(BaseSettings):
     xiaobao_rate_limit_requests: int = 10
     xiaobao_rate_limit_window_seconds: int = 300
     xiaobao_checkpoint_ttl_seconds: int = 7 * 24 * 60 * 60
+    xiaobao_routine_clock_poll_interval_seconds: float = 15.0
+    xiaobao_routine_worker_poll_interval_seconds: float = 2.0
+    xiaobao_routine_lease_seconds: float = 300.0
+    xiaobao_routine_max_attempts: int = 3
+    xiaobao_routine_retry_base_seconds: float = 30.0
+    xiaobao_routine_retry_max_seconds: float = 900.0
+    xiaobao_routine_materialize_batch_size: int = 50
     mediation_worker_enabled: bool = False
     mediation_worker_poll_interval_seconds: float = 2.0
     mediation_job_processing_timeout_seconds: float = 300.0
@@ -102,7 +111,7 @@ class Settings(BaseSettings):
 
     @field_validator("frontend_urls", mode="before")
     @classmethod
-    def split_frontend_urls(cls, v: str | list[str] | None):  # type: ignore[override]
+    def split_frontend_urls(cls, v: str | list[str] | None) -> list[str] | None:
         """Allow FRONTEND_URLS env var to be provided as a comma-separated string.
 
         Example:
@@ -117,7 +126,7 @@ class Settings(BaseSettings):
 
     @field_validator("thumbnail_sizes", mode="before")
     @classmethod
-    def split_thumbnail_sizes(cls, v: str | list[int] | None):  # type: ignore[override]
+    def split_thumbnail_sizes(cls, v: str | list[int] | None) -> list[int] | None:
         """Allow THUMBNAIL_SIZES env var to be provided as a comma-separated string.
 
         Example:

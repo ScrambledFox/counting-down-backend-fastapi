@@ -71,6 +71,63 @@ Set `OPENAI_API_KEY` to enable generation. The model, limits, context budget, an
 are configurable through the `XIAOBAO_*` and `OPENAI_MODEL_XIAOBAO` values documented in
 `.env.example`. MongoDB collections and indexes are added on startup without a data migration.
 
+### Xiao Bao routines
+
+Owner-private routines and reminders are managed below `/api/v1/xiaobao/routines`; their messages
+appear in `/api/v1/xiaobao/inbox`. A `ROUTINE` is LLM-generated and uses a `DAILY` or `WEEKLY`
+schedule. A `REMINDER` uses `ONCE` plus an IANA timezone, `YYYY-MM-DD` local date, `HH:MM`
+wall-clock time, and exact user-approved static text; it never loads relationship context or calls
+the model when delivering. A nonexistent daylight-saving local time is rejected for a reminder so
+the reviewed time remains truthful; recurring routines retain their forward-to-the-next-valid-time
+behavior. Weekdays are integers from Monday `0` through Sunday `6`. Event-based
+`TRIGGER` scheduling is intentionally not supported yet and must not be represented as a calendar
+schedule. A proposed routine or reminder remains a review card until its owner accepts it.
+
+Routine execution is split into two durable Mongo-backed process types:
+
+```text
+clock:  python -m app.workers.xiaobao_routine_clock
+worker: python -m app.workers.xiaobao_routine_worker
+```
+
+The clock materializes uniquely keyed occurrences and advances schedules atomically. The worker
+claims runs with expiring leases and bounded retry backoff. It rebuilds fresh relationship-care
+context, including incomplete non-deleted Together List items, but it never queries mediation,
+loads chat history, reuses an interactive checkpoint, or exposes model tools. Consequently an
+unattended routine can read the Together List for relevance but cannot change it or any other
+relationship data. Configure polling, lease, retry, and batch limits with the
+`XIAOBAO_ROUTINE_*` values in `.env.example`.
+
+The clock auto-pauses an active routine when that routine has output that has been visible and
+unread in its owner's routines inbox for five consecutive full days (exactly 120 hours).
+Visibility begins when a staged message first becomes
+`COMPLETE`; finalize retries preserve that original delivery time. Older visible records created
+before delivery timestamps were stored use `created_at` as a safe legacy fallback. Hidden
+`PENDING_DELIVERY` messages, ordinary Xiao Bao chat, another owner's inbox, and another routine's
+messages never qualify. The clock re-checks the exact unread predicate immediately before its
+revision-guarded pause; a read observed by that check prevents the pause, while a concurrent read
+after the check does not undo the already observed inactivity decision.
+
+Routine responses expose `pause_reason` as `MANUAL`, `UNREAD_INACTIVITY`, or `null`, alongside
+`paused_at`. Resuming an inactivity-paused routine returns `409 Conflict` while that same routine
+still has output at or older than the unread threshold. Reading those older inbox messages permits
+resume and clears both pause fields; manually paused routines are unaffected by this guard.
+The private inbox accepts optional `routine_id`, opaque `cursor`, and `limit` query parameters so
+all blocking output remains reachable. A routine filter is owner-validated, pages use a stable
+newest-first `(created_at, id)` order, and `next_cursor` retrieves the next older page without
+timestamp ties being skipped. `unread_count` remains the owner's global inbox count.
+
+Pause, resume, edits, and deletion increment the routine revision, invalidating any older claimed
+run. Delivery uses a Mongo-backed guard on that revision. A generated message is first stored as
+`PENDING_DELIVERY`, which inbox queries never return; it becomes visible only after the routine
+record atomically commits that run ID while still enabled at the same revision. If pause/resume
+wins that ordering race, the staged message is explicitly deleted. If commit wins, the delivery
+is considered to have happened before the later pause; a durable commit marker lets a retry
+finish exposing the non-expiring hidden message after a worker crash or arbitrary downtime, even
+when the routine is later paused or edited. The marker blocks later deliveries for that routine
+until the committed message is visible, then it is released idempotently. This provides a clear
+ordering without assuming transactions across the routines and messages collections.
+
 Live-model checks are opt-in and use synthetic content:
 
 ```bash

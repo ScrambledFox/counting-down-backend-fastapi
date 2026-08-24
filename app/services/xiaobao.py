@@ -23,6 +23,7 @@ from app.schemas.v1.user import UserType
 from app.schemas.v1.xiaobao import (
     XiaoBaoConversation,
     XiaoBaoConversationDetail,
+    XiaoBaoConversationPurpose,
     XiaoBaoMessage,
     XiaoBaoMessageCreate,
     XiaoBaoMessageRole,
@@ -70,6 +71,7 @@ class XiaoBaoConversationService:
             XiaoBaoConversation(
                 owner_user_type=owner,
                 title="New chat",
+                purpose=XiaoBaoConversationPurpose.CHAT,
                 created_at=now,
                 updated_at=now,
             )
@@ -107,7 +109,9 @@ class XiaoBaoConversationService:
     async def _require_conversation(
         self, conversation_id: MongoId, owner: UserType
     ) -> XiaoBaoConversation:
-        conversation = await self._conversations.get_owned(conversation_id, owner)
+        conversation = await self._conversations.get_owned(
+            conversation_id, owner, XiaoBaoConversationPurpose.CHAT
+        )
         if not conversation:
             raise NotFoundException("Xiao Bao conversation", conversation_id)
         return conversation
@@ -257,6 +261,15 @@ class XiaoBaoConversationService:
         task: asyncio.Task[Any] | None = None
         try:
             authorized_context = await self._relationship_context.build(owner)
+            profile = authorized_context.public.relationship_profile
+            owner_timezone = next(
+                (
+                    person.timezone
+                    for person in (profile.people if profile else [])
+                    if person.user_type == owner and person.timezone
+                ),
+                None,
+            )
             history = await self._history(conversation_id, str(user_message.id))
             runtime = XiaoBaoRuntimeContext(
                 owner=owner,
@@ -269,6 +282,8 @@ class XiaoBaoConversationService:
                 todo_service=self._todos,
                 openai_client=self._openai,
                 emit=emit,
+                current_time_utc=utc_now(),
+                owner_timezone=owner_timezone,
             )
             task = asyncio.create_task(run_xiaobao_graph(runtime, user_message.content))
             while not task.done() or not queue.empty():

@@ -11,17 +11,28 @@ from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.xiaobao import (
     XiaoBaoConversation,
     XiaoBaoConversationDetail,
+    XiaoBaoInbox,
+    XiaoBaoInboxMessageResponse,
     XiaoBaoMessageCreate,
     XiaoBaoProposal,
     XiaoBaoProposalUpdate,
 )
+from app.schemas.v1.xiaobao_routine import (
+    XiaoBaoInboxUnreadCount,
+    XiaoBaoRoutineCreate,
+    XiaoBaoRoutineResponse,
+    XiaoBaoRoutineRunList,
+    XiaoBaoRoutineUpdate,
+)
 from app.services.xiaobao import XiaoBaoConversationService
 from app.services.xiaobao_proposals import XiaoBaoProposalService
+from app.services.xiaobao_routine import XiaoBaoRoutineService
 
 router = make_router()
 SessionDep = Annotated[SessionResponse, Security(require_session)]
 ConversationServiceDep = Annotated[XiaoBaoConversationService, Depends()]
 ProposalServiceDep = Annotated[XiaoBaoProposalService, Depends()]
+RoutineServiceDep = Annotated[XiaoBaoRoutineService, Depends()]
 
 
 @router.post(
@@ -126,3 +137,104 @@ async def reject_proposal(
     proposal_id: MongoId, service: ProposalServiceDep, session: SessionDep
 ) -> XiaoBaoProposal:
     return await service.reject(proposal_id, session.user_type)
+
+
+@router.get("/routines", response_model=list[XiaoBaoRoutineResponse])
+async def list_routines(
+    service: RoutineServiceDep, session: SessionDep
+) -> list[XiaoBaoRoutineResponse]:
+    return await service.list(session.user_type)
+
+
+@router.post(
+    "/routines", response_model=XiaoBaoRoutineResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_routine(
+    payload: XiaoBaoRoutineCreate, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoRoutineResponse:
+    return await service.create(payload, session.user_type)
+
+
+@router.get("/routines/{routine_id}", response_model=XiaoBaoRoutineResponse)
+async def get_routine(
+    routine_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoRoutineResponse:
+    return await service.get(routine_id, session.user_type)
+
+
+@router.patch("/routines/{routine_id}", response_model=XiaoBaoRoutineResponse)
+async def update_routine(
+    routine_id: MongoId,
+    payload: XiaoBaoRoutineUpdate,
+    service: RoutineServiceDep,
+    session: SessionDep,
+) -> XiaoBaoRoutineResponse:
+    return await service.update(routine_id, payload, session.user_type)
+
+
+@router.delete("/routines/{routine_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_routine(
+    routine_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> Response:
+    await service.delete(routine_id, session.user_type)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/routines/{routine_id}/pause", response_model=XiaoBaoRoutineResponse)
+async def pause_routine(
+    routine_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoRoutineResponse:
+    return await service.pause(routine_id, session.user_type)
+
+
+@router.post(
+    "/routines/{routine_id}/resume",
+    response_model=XiaoBaoRoutineResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {"description": "Unread inactivity threshold still blocks resume"}
+    },
+)
+async def resume_routine(
+    routine_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoRoutineResponse:
+    return await service.resume(routine_id, session.user_type)
+
+
+@router.get("/routines/{routine_id}/runs", response_model=XiaoBaoRoutineRunList)
+async def list_routine_runs(
+    routine_id: MongoId,
+    service: RoutineServiceDep,
+    session: SessionDep,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> XiaoBaoRoutineRunList:
+    return await service.list_runs(routine_id, session.user_type, limit=limit)
+
+
+@router.get("/inbox", response_model=XiaoBaoInbox)
+async def get_routine_inbox(
+    service: RoutineServiceDep,
+    session: SessionDep,
+    limit: int = Query(default=50, ge=1, le=100),
+    routine_id: MongoId | None = Query(default=None),
+    cursor: str | None = Query(default=None, min_length=1, max_length=500),
+) -> XiaoBaoInbox:
+    return await service.inbox(
+        session.user_type,
+        limit=limit,
+        routine_id=routine_id,
+        cursor=cursor,
+    )
+
+
+@router.get("/inbox/unread-count", response_model=XiaoBaoInboxUnreadCount)
+async def get_routine_inbox_unread_count(
+    service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoInboxUnreadCount:
+    return await service.unread_count(session.user_type)
+
+
+@router.post("/inbox/{message_id}/read", response_model=XiaoBaoInboxMessageResponse)
+async def mark_routine_inbox_message_read(
+    message_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoInboxMessageResponse:
+    return await service.mark_read(message_id, session.user_type)

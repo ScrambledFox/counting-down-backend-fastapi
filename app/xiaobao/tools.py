@@ -2,7 +2,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.integrations.openai_client import _to_openai_strict_json_schema
 from app.repositories.xiaobao import XiaoBaoProposalRepository
@@ -28,6 +28,7 @@ from app.schemas.v1.xiaobao import (
     XiaoBaoRelationshipContext,
     XiaoBaoTogetherListPayload,
 )
+from app.schemas.v1.xiaobao_routine import XiaoBaoRoutineCreate, XiaoBaoRoutineKind
 from app.services.todo import TodoService
 from app.util.time import utc_now
 
@@ -81,6 +82,28 @@ class _MediationPerspectiveDraftProposalArgs(BaseModel):
     rationale: str | None = Field(default=None, max_length=2000)
 
 
+class _RoutineProposalArgs(BaseModel):
+    payload: XiaoBaoRoutineCreate
+    rationale: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_recurring_routine(self) -> _RoutineProposalArgs:
+        if self.payload.kind != XiaoBaoRoutineKind.ROUTINE:
+            raise ValueError("propose_routine only accepts recurring routines")
+        return self
+
+
+class _ReminderProposalArgs(BaseModel):
+    payload: XiaoBaoRoutineCreate
+    rationale: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_one_time_reminder(self) -> _ReminderProposalArgs:
+        if self.payload.kind != XiaoBaoRoutineKind.REMINDER:
+            raise ValueError("propose_reminder only accepts one-time reminders")
+        return self
+
+
 @dataclass
 class XiaoBaoToolContext:
     owner: UserType
@@ -127,6 +150,17 @@ _TOOLS: list[tuple[str, str, type[BaseModel]]] = [
         "propose_together_list_item",
         "Create a reviewable Together List proposal.",
         _TogetherProposalArgs,
+    ),
+    (
+        "propose_routine",
+        "Create a reviewable private recurring Xiao Bao routine proposal. "
+        "It runs only after acceptance.",
+        _RoutineProposalArgs,
+    ),
+    (
+        "propose_reminder",
+        "Create a reviewable private one-time Xiao Bao reminder with user-approved static text.",
+        _ReminderProposalArgs,
     ),
     (
         "add_together_list_item",
@@ -266,6 +300,8 @@ async def execute_xiaobao_tool(
         "propose_mediation_session": XiaoBaoProposalType.MEDIATION_SESSION,
         "propose_mediation_comment": XiaoBaoProposalType.MEDIATION_COMMENT,
         "propose_mediation_perspective_draft": (XiaoBaoProposalType.MEDIATION_PERSPECTIVE_DRAFT),
+        "propose_routine": XiaoBaoProposalType.ROUTINE,
+        "propose_reminder": XiaoBaoProposalType.REMINDER,
     }
     if not isinstance(
         parsed,
@@ -277,6 +313,8 @@ async def execute_xiaobao_tool(
             _MediationSessionProposalArgs,
             _MediationCommentProposalArgs,
             _MediationPerspectiveDraftProposalArgs,
+            _RoutineProposalArgs,
+            _ReminderProposalArgs,
         ),
     ):
         raise ValueError("Invalid proposal tool arguments")

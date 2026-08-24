@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -92,6 +93,31 @@ def _empty_graph_state() -> dict[str, object]:
         "tool_rounds": 0,
         "loaded_private_mediation_keys": [],
     }
+
+
+def test_interactive_model_input_has_server_temporal_context_and_owner_timezone() -> None:
+    runtime = XiaoBaoRuntimeContext(
+        owner=UserType.JORIS,
+        conversation_id=OID_1,
+        assistant_message_id=OID_2,
+        history=[],
+        relationship_context=XiaoBaoRelationshipContext(
+            current_user_type=UserType.JORIS,
+            partner_user_type=UserType.DANFENG,
+        ),
+        private_mediation_by_key={},
+        proposal_repo=SimpleNamespace(),
+        todo_service=SimpleNamespace(),
+        openai_client=SimpleNamespace(),
+        emit=AsyncMock(),
+        current_time_utc=datetime(2026, 8, 24, 10, 30, tzinfo=UTC),
+        owner_timezone="Europe/Amsterdam",
+    )
+
+    items = _initial_provider_items(_empty_graph_state(), runtime)  # type: ignore[arg-type]
+
+    assert "2026-08-24T10:30:00+00:00" in items[1]["content"]
+    assert "Europe/Amsterdam" in items[1]["content"]
 
 
 def _mediation_data() -> tuple[MediationSessionListItem, MediationSessionDetailResponse]:

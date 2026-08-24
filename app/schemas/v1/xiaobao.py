@@ -13,6 +13,7 @@ from app.schemas.v1.relationship_care import (
 )
 from app.schemas.v1.relationship_profile import RelationshipProfileAIContext
 from app.schemas.v1.user import UserType
+from app.schemas.v1.xiaobao_routine import XiaoBaoRoutineCreate, XiaoBaoRoutineKind
 
 
 class XiaoBaoMessageRole(str, Enum):
@@ -22,9 +23,20 @@ class XiaoBaoMessageRole(str, Enum):
 
 class XiaoBaoMessageStatus(str, Enum):
     GENERATING = "GENERATING"
+    PENDING_DELIVERY = "PENDING_DELIVERY"
     COMPLETE = "COMPLETE"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+class XiaoBaoConversationPurpose(str, Enum):
+    CHAT = "CHAT"
+    ROUTINE_INBOX = "ROUTINE_INBOX"
+
+
+class XiaoBaoMessageSource(str, Enum):
+    INTERACTIVE = "INTERACTIVE"
+    ROUTINE = "ROUTINE"
 
 
 class XiaoBaoMascotMood(str, Enum):
@@ -50,6 +62,8 @@ class XiaoBaoProposalType(str, Enum):
     MEDIATION_SESSION = "MEDIATION_SESSION"
     MEDIATION_COMMENT = "MEDIATION_COMMENT"
     MEDIATION_PERSPECTIVE_DRAFT = "MEDIATION_PERSPECTIVE_DRAFT"
+    ROUTINE = "ROUTINE"
+    REMINDER = "REMINDER"
 
 
 class XiaoBaoProposalStatus(str, Enum):
@@ -95,6 +109,7 @@ class XiaoBaoConversation(CustomModel):
     id: DefaultMongoIdField = None
     owner_user_type: UserType
     title: str = Field(min_length=1, max_length=80)
+    purpose: XiaoBaoConversationPurpose = XiaoBaoConversationPurpose.CHAT
     created_at: datetime
     updated_at: datetime
 
@@ -104,6 +119,7 @@ class XiaoBaoMessage(CustomModel):
     conversation_id: MongoId
     role: XiaoBaoMessageRole
     status: XiaoBaoMessageStatus
+    source: XiaoBaoMessageSource = XiaoBaoMessageSource.INTERACTIVE
     content: str = Field(default="", max_length=50_000)
     client_message_id: str | None = Field(default=None, min_length=1, max_length=100)
     parent_user_message_id: MongoId | None = None
@@ -115,6 +131,10 @@ class XiaoBaoMessage(CustomModel):
     provider_response_id: str | None = Field(default=None, max_length=200)
     token_usage: XiaoBaoTokenUsage | None = None
     error_code: str | None = Field(default=None, max_length=80)
+    routine_id: MongoId | None = None
+    routine_run_id: MongoId | None = None
+    read_at: datetime | None = None
+    delivered_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -188,6 +208,7 @@ type XiaoBaoProposalPayload = (
     | MediationSessionCreate
     | XiaoBaoMediationCommentPayload
     | XiaoBaoMediationPerspectiveDraftPayload
+    | XiaoBaoRoutineCreate
 )
 
 
@@ -199,6 +220,8 @@ _PROPOSAL_PAYLOAD_TYPES: dict[XiaoBaoProposalType, type[CustomModel]] = {
     XiaoBaoProposalType.MEDIATION_SESSION: MediationSessionCreate,
     XiaoBaoProposalType.MEDIATION_COMMENT: XiaoBaoMediationCommentPayload,
     XiaoBaoProposalType.MEDIATION_PERSPECTIVE_DRAFT: XiaoBaoMediationPerspectiveDraftPayload,
+    XiaoBaoProposalType.ROUTINE: XiaoBaoRoutineCreate,
+    XiaoBaoProposalType.REMINDER: XiaoBaoRoutineCreate,
 }
 
 
@@ -232,6 +255,16 @@ class XiaoBaoProposal(CustomModel):
         expected = _PROPOSAL_PAYLOAD_TYPES[self.type]
         if not isinstance(self.payload, expected):
             raise ValueError(f"Payload does not match proposal type {self.type.value}")
+        if (
+            self.type == XiaoBaoProposalType.ROUTINE
+            and self.payload.kind != XiaoBaoRoutineKind.ROUTINE
+        ):
+            raise ValueError("Routine proposals require a recurring routine payload")
+        if (
+            self.type == XiaoBaoProposalType.REMINDER
+            and self.payload.kind != XiaoBaoRoutineKind.REMINDER
+        ):
+            raise ValueError("Reminder proposals require a one-time reminder payload")
         needs_target = self.type in {
             XiaoBaoProposalType.MEDIATION_COMMENT,
             XiaoBaoProposalType.MEDIATION_PERSPECTIVE_DRAFT,
@@ -264,6 +297,28 @@ class XiaoBaoConversationDetail(CustomModel):
     messages: list[XiaoBaoMessage]
     proposals: list[XiaoBaoProposal]
     has_more_messages: bool = False
+
+
+class XiaoBaoInboxMessageResponse(CustomModel):
+    id: MongoId
+    content: str
+    mascot_mood: XiaoBaoMascotMood | None = None
+    routine_id: MongoId
+    routine_run_id: MongoId
+    read_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, message: XiaoBaoMessage) -> XiaoBaoInboxMessageResponse:
+        return cls.model_validate(message.model_dump(mode="python"))
+
+
+class XiaoBaoInbox(CustomModel):
+    messages: list[XiaoBaoInboxMessageResponse]
+    has_more_messages: bool = False
+    next_cursor: str | None = None
+    unread_count: int = 0
 
 
 class XiaoBaoContextItem(CustomModel):

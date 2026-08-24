@@ -3,7 +3,7 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException
 
 from app.repositories.xiaobao import XiaoBaoProposalRepository
-from app.schemas.v1.exceptions import ConflictException, NotFoundException
+from app.schemas.v1.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.schemas.v1.mediation import (
     MediationCommentCreate,
     MediationPerspectiveDraftUpdate,
@@ -24,9 +24,11 @@ from app.schemas.v1.xiaobao import (
     XiaoBaoTogetherListPayload,
     validate_xiaobao_proposal_payload,
 )
+from app.schemas.v1.xiaobao_routine import XiaoBaoRoutineCreate, XiaoBaoRoutineKind
 from app.services.mediation import MediationService
 from app.services.relationship_care import RelationshipCareService
 from app.services.todo import TodoService
+from app.services.xiaobao_routine import XiaoBaoRoutineService
 
 
 class XiaoBaoProposalService:
@@ -36,11 +38,13 @@ class XiaoBaoProposalService:
         relationship_care: Annotated[RelationshipCareService, Depends()],
         todos: Annotated[TodoService, Depends()],
         mediation: Annotated[MediationService, Depends()],
+        routines: Annotated[XiaoBaoRoutineService, Depends()] = None,  # type: ignore[assignment]
     ) -> None:
         self._proposals = proposals
         self._relationship_care = relationship_care
         self._todos = todos
         self._mediation = mediation
+        self._routines = routines
 
     async def update(
         self, proposal_id: str, owner: UserType, payload: dict[str, Any]
@@ -49,6 +53,18 @@ class XiaoBaoProposalService:
         if not proposal:
             raise NotFoundException("Xiao Bao proposal", proposal_id)
         validated = validate_xiaobao_proposal_payload(proposal.type, payload)
+        if proposal.type in {XiaoBaoProposalType.ROUTINE, XiaoBaoProposalType.REMINDER}:
+            if not isinstance(validated, XiaoBaoRoutineCreate):
+                raise BadRequestException("Invalid Xiao Bao scheduled proposal payload")
+            expected_kind = (
+                XiaoBaoRoutineKind.ROUTINE
+                if proposal.type == XiaoBaoProposalType.ROUTINE
+                else XiaoBaoRoutineKind.REMINDER
+            )
+            if validated.kind != expected_kind:
+                raise BadRequestException(
+                    f"{proposal.type.value.title()} proposal payload kind cannot be changed"
+                )
         updated = await self._proposals.update_pending(
             proposal_id, owner, validated.model_dump(mode="json", exclude_none=True)
         )
@@ -124,6 +140,13 @@ class XiaoBaoProposalService:
                     ),
                 )
                 entity_id = str(perspective.id) if perspective.id else None
+            elif proposal.type in {XiaoBaoProposalType.ROUTINE, XiaoBaoProposalType.REMINDER}:
+                if self._routines is None:
+                    raise ConflictException("Xiao Bao routines are unavailable")
+                routine = await self._routines.create(
+                    XiaoBaoRoutineCreate.model_validate(proposal.payload), owner
+                )
+                entity_id = str(routine.id) if routine.id else None
         except HTTPException:
             await self._proposals.release_acceptance(proposal_id)
             raise
