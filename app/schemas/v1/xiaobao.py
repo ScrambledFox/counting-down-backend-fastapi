@@ -135,6 +135,9 @@ class XiaoBaoMessage(CustomModel):
     routine_run_id: MongoId | None = None
     read_at: datetime | None = None
     delivered_at: datetime | None = None
+    # Internal outbox marker. Inbox responses intentionally do not expose it.
+    push_dispatch_pending: bool = False
+    push_enqueued_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

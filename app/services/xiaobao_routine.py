@@ -283,3 +283,16 @@ class XiaoBaoRoutineService:
         if not message:
             raise NotFoundException("Xiao Bao inbox message", message_id)
         return XiaoBaoInboxMessageResponse.from_record(message)
+
+    async def get_inbox_message(
+        self, message_id: MongoId, owner: UserType
+    ) -> XiaoBaoInboxMessageResponse:
+        conversation = await self._conversations.get_or_create_inbox(owner)
+        if not conversation.id:
+            raise ConflictException("The routines inbox is unavailable")
+        message = await self._messages.get_owned_routine_inbox_message(
+            message_id, str(conversation.id)
+        )
+        if not message:
+            raise NotFoundException("Xiao Bao inbox message", message_id)
+        return XiaoBaoInboxMessageResponse.from_record(message)

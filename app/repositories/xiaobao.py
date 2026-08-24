@@ -68,6 +68,10 @@ class XiaoBaoConversationRepository:
         doc = await self._conversations.find_one(query)
         return XiaoBaoConversation.model_validate(doc) if doc else None
 
+    async def get(self, conversation_id: MongoId) -> XiaoBaoConversation | None:
+        doc = await self._conversations.find_one({"_id": _oid(conversation_id)})
+        return XiaoBaoConversation.model_validate(doc) if doc else None
+
     async def get_or_create_inbox(self, owner: UserType) -> XiaoBaoConversation:
         now = utc_now()
         query = {"owner_user_type": owner, "purpose": XiaoBaoConversationPurpose.ROUTINE_INBOX}
@@ -319,6 +323,29 @@ class XiaoBaoMessageRepository:
             {
                 "routine_run_id": str(routine_run_id),
                 "source": XiaoBaoMessageSource.ROUTINE,
+            }
+        )
+        return XiaoBaoMessage.model_validate(doc) if doc else None
+
+    async def get_completed_routine_message(self, message_id: MongoId) -> XiaoBaoMessage | None:
+        doc = await self._collection.find_one(
+            {
+                "_id": _oid(message_id),
+                "source": XiaoBaoMessageSource.ROUTINE,
+                "status": XiaoBaoMessageStatus.COMPLETE,
+            }
+        )
+        return XiaoBaoMessage.model_validate(doc) if doc else None
+
+    async def get_owned_routine_inbox_message(
+        self, message_id: MongoId, conversation_id: MongoId
+    ) -> XiaoBaoMessage | None:
+        doc = await self._collection.find_one(
+            {
+                "_id": _oid(message_id),
+                "conversation_id": str(conversation_id),
+                "source": XiaoBaoMessageSource.ROUTINE,
+                "status": XiaoBaoMessageStatus.COMPLETE,
             }
         )
         return XiaoBaoMessage.model_validate(doc) if doc else None

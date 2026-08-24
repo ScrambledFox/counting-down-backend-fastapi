@@ -343,6 +343,9 @@ class XiaoBaoRoutineExecutionService:
                 model=model,
                 provider_response_id=response_id,
                 token_usage=token_usage,
+                # New output only: a disabled deployment leaves this false, so enabling later
+                # never backfills historic inbox items as notifications.
+                push_dispatch_pending=settings.xiaobao_web_push_ready,
                 created_at=now,
                 updated_at=now,
             )

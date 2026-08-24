@@ -128,6 +128,17 @@ when the routine is later paused or edited. The marker blocks later deliveries f
 until the committed message is visible, then it is released idempotently. This provides a clear
 ordering without assuming transactions across the routines and messages collections.
 
+### Xiao Bao Web Push
+
+Web Push is disabled by default. When configured with the `XIAOBAO_WEB_PUSH_*` VAPID and
+subscription-encryption values, browsers can register an authenticated device at
+`/api/v1/xiaobao/push/subscriptions`. Subscriptions are encrypted at rest and list responses never
+expose endpoints or encryption keys. A separate `push-worker` process delivers a fixed encrypted
+payload containing only an inbox message identifier; the frontend service worker owns the generic
+lock-screen text and navigation. Inbox persistence remains authoritative: a completed private inbox
+message is queued for push afterward, and push errors never retry generation, alter read state, or
+remove that message. Existing messages are never backfilled when push is enabled.
+
 Live-model checks are opt-in and use synthetic content:
 
 ```bash

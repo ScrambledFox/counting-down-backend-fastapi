@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, Query, Response, Security, status
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,13 @@ from app.schemas.v1.xiaobao import (
     XiaoBaoProposal,
     XiaoBaoProposalUpdate,
 )
+from app.schemas.v1.xiaobao_push import (
+    XiaoBaoPushConfigResponse,
+    XiaoBaoPushSubscriptionResponse,
+    XiaoBaoPushSubscriptionUpsert,
+    XiaoBaoPushTestRequest,
+    XiaoBaoPushTestResponse,
+)
 from app.schemas.v1.xiaobao_routine import (
     XiaoBaoInboxUnreadCount,
     XiaoBaoRoutineCreate,
@@ -26,6 +34,7 @@ from app.schemas.v1.xiaobao_routine import (
 )
 from app.services.xiaobao import XiaoBaoConversationService
 from app.services.xiaobao_proposals import XiaoBaoProposalService
+from app.services.xiaobao_push import XiaoBaoPushService
 from app.services.xiaobao_routine import XiaoBaoRoutineService
 
 router = make_router()
@@ -33,6 +42,7 @@ SessionDep = Annotated[SessionResponse, Security(require_session)]
 ConversationServiceDep = Annotated[XiaoBaoConversationService, Depends()]
 ProposalServiceDep = Annotated[XiaoBaoProposalService, Depends()]
 RoutineServiceDep = Annotated[XiaoBaoRoutineService, Depends()]
+PushServiceDep = Annotated[XiaoBaoPushService, Depends()]
 
 
 @router.post(
@@ -233,8 +243,62 @@ async def get_routine_inbox_unread_count(
     return await service.unread_count(session.user_type)
 
 
+@router.get("/inbox/{message_id}", response_model=XiaoBaoInboxMessageResponse)
+async def get_routine_inbox_message(
+    message_id: MongoId, service: RoutineServiceDep, session: SessionDep
+) -> XiaoBaoInboxMessageResponse:
+    return await service.get_inbox_message(message_id, session.user_type)
+
+
 @router.post("/inbox/{message_id}/read", response_model=XiaoBaoInboxMessageResponse)
 async def mark_routine_inbox_message_read(
     message_id: MongoId, service: RoutineServiceDep, session: SessionDep
 ) -> XiaoBaoInboxMessageResponse:
     return await service.mark_read(message_id, session.user_type)
+
+
+@router.get("/push/config", response_model=XiaoBaoPushConfigResponse)
+async def get_push_config(
+    service: PushServiceDep, session: SessionDep
+) -> XiaoBaoPushConfigResponse:
+    del session
+    return await service.config()
+
+
+@router.get("/push/subscriptions", response_model=list[XiaoBaoPushSubscriptionResponse])
+async def list_push_subscriptions(
+    service: PushServiceDep, session: SessionDep
+) -> list[XiaoBaoPushSubscriptionResponse]:
+    return await service.list(session.user_type)
+
+
+@router.put("/push/subscriptions/{device_id}", response_model=XiaoBaoPushSubscriptionResponse)
+async def upsert_push_subscription(
+    device_id: UUID,
+    payload: XiaoBaoPushSubscriptionUpsert,
+    service: PushServiceDep,
+    session: SessionDep,
+) -> XiaoBaoPushSubscriptionResponse:
+    return await service.upsert(device_id, session.user_type, payload)
+
+
+@router.delete("/push/subscriptions/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_push_subscription(
+    device_id: UUID, service: PushServiceDep, session: SessionDep
+) -> Response:
+    await service.revoke(device_id, session.user_type)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/push/subscriptions/{device_id}/test",
+    response_model=XiaoBaoPushTestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def test_push_subscription(
+    device_id: UUID,
+    payload: XiaoBaoPushTestRequest,
+    service: PushServiceDep,
+    session: SessionDep,
+) -> XiaoBaoPushTestResponse:
+    return await service.test(device_id, session.user_type, str(payload.client_test_id))
