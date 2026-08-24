@@ -61,7 +61,7 @@ asyncio_default_test_loop_scope = "session"
 markers = ["live_ai: opt-in Xiao Bao evaluation that calls the configured OpenAI model"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 plugins = "pydantic.mypy"
 
 disallow_untyped_defs = true
