@@ -51,8 +51,11 @@ async def list_images(
     img_service: ImageServiceDependency,
     limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
+    sensitive_only: bool = False,
 ) -> ImagePageResponse:
-    items, next_cursor = await img_service.list_image_metadata_page(limit=limit, cursor=cursor)
+    items, next_cursor = await img_service.list_image_metadata_page(
+        limit=limit, cursor=cursor, sensitive_only=sensitive_only
+    )
 
     items_with_urls = [
         ImageMetadataResponse(
@@ -77,9 +80,13 @@ async def get_images_for_me(
     user_info: Annotated[SessionResponse, Depends(require_session)],
     limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
+    sensitive_only: bool = False,
 ) -> ImagePageResponse:
     items, next_cursor = await img_service.list_image_metadata_page(
-        limit=limit, cursor=cursor, user_filter=user_info.get_other_user()
+        limit=limit,
+        cursor=cursor,
+        user_filter=user_info.get_other_user(),
+        sensitive_only=sensitive_only,
     )
     items_with_urls = [
         ImageMetadataResponse(
@@ -103,9 +110,13 @@ async def get_images_by_me(
     user_info: Annotated[SessionResponse, Depends(require_session)],
     limit: int = Query(settings.default_page_size, ge=1, le=settings.max_page_size),
     cursor: str | None = Query(None),
+    sensitive_only: bool = False,
 ) -> ImagePageResponse:
     items, next_cursor = await img_service.list_image_metadata_page(
-        limit=limit, cursor=cursor, user_filter=user_info.user_type
+        limit=limit,
+        cursor=cursor,
+        user_filter=user_info.user_type,
+        sensitive_only=sensitive_only,
     )
     items_with_urls = [
         ImageMetadataResponse(

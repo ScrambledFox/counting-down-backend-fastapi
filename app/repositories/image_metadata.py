@@ -41,7 +41,11 @@ class ImageMetadataRepository:
         return ImageMetadata.model_validate(doc) if doc else None
 
     async def list_image_metadata_page(
-        self, limit: int, cursor: ImageCursorPayload | None, user_filter: UserType | None = None
+        self,
+        limit: int,
+        cursor: ImageCursorPayload | None,
+        user_filter: UserType | None = None,
+        sensitive_only: bool = False,
     ) -> list[ImageMetadata]:
         # Index required for keyset pagination (created_at stored as uploaded_at):
         # db.images.createIndex({ uploaded_at: -1, _id: -1 })
@@ -49,6 +53,9 @@ class ImageMetadataRepository:
 
         if user_filter is not None:
             query["uploaded_by"] = user_filter
+
+        if sensitive_only:
+            query["image_tags"] = {"$regex": r"^\s*(sensitive|spicy|nude)\s*$", "$options": "i"}
 
         if cursor is not None:
             query = {
