@@ -30,6 +30,7 @@ class ImageMetadata(ImageMetadataBase):
     media_type: str | None
     uploaded_at: datetime = Field(default_factory=utc_now)
     deleted_at: datetime | None = None
+    thumbnail_sizes_ready: list[int] = Field(default_factory=list)
 
 
 class ImageMetadataCreate(ImageMetadataBase):

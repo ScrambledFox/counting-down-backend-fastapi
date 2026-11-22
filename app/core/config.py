@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
     thumbnail_size: int = 128
+    image_worker_enabled: bool = True
+    image_worker_poll_seconds: float = Field(default=30.0, gt=0)
     thumbnail_xl_size: int = 1200
     # Optional explicit list of thumbnail sizes (comma-separated). If provided, supersedes
     # thumbnail_size/thumbnail_xl_size.

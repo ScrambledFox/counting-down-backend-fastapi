@@ -31,7 +31,10 @@ class ImageService:
         self._metadata = metadata_repository
 
     def _get_configured_thumbnail_sizes(self) -> list[int]:
-        sizes = settings.thumbnail_sizes or [settings.thumbnail_size, settings.thumbnail_xl_size]
+        sizes = (settings.thumbnail_sizes or []) + [
+            settings.thumbnail_size,
+            settings.thumbnail_xl_size,
+        ]
         normalized = sorted({int(size) for size in sizes if int(size) > 0})
         return normalized
 
@@ -70,9 +73,7 @@ class ImageService:
         self._validate_thumbnail_size(resolved)
         return resolved
 
-    async def _ensure_thumbnails_for_image_key(
-        self, key: str, sizes: list[int] | None = None
-    ) -> None:
+    async def prepare_thumbnails(self, key: str, sizes: list[int] | None = None) -> None:
         resolved_sizes = self._resolve_thumbnail_sizes(sizes)
         if not resolved_sizes:
             return
@@ -91,7 +92,7 @@ class ImageService:
             raise NotFoundException("Image", key)
 
         for size in missing_sizes:
-            thumbnail, img_format = create_thumbnail(image, size)
+            thumbnail, img_format = await asyncio.to_thread(create_thumbnail, image, size)
             await self._images.upload_thumbnail_image(
                 get_thumbnail_name(key, size),
                 thumbnail,
@@ -99,7 +100,7 @@ class ImageService:
             )
 
     async def _create_custom_thumbnail_for_image_key(self, key: str, thumbnail_size: int) -> None:
-        await self._ensure_thumbnails_for_image_key(key, [thumbnail_size])
+        await self.prepare_thumbnails(key, [thumbnail_size])
 
     async def _create_standard_thumbnail_for_image_key(self, key: str) -> None:
         await self._create_custom_thumbnail_for_image_key(key, settings.thumbnail_size)
@@ -137,7 +138,6 @@ class ImageService:
         self, limit: int, cursor: str | None, user_filter: UserType | None = None
     ) -> tuple[list[ImageMetadata], str | None]:
         decoded_cursor = decode_image_cursor(cursor) if cursor else None
-        await self._metadata.import_completed_advents()
         docs = await self._metadata.list_image_metadata_page(limit + 1, decoded_cursor, user_filter)
 
         has_more = len(docs) > limit
@@ -167,9 +167,6 @@ class ImageService:
 
         # Save Image to storage
         await self._images.upload_image(IMAGE_KEY, image_data, image.content_type)
-
-        #  Create thumbnails
-        asyncio.create_task(self._ensure_thumbnails_for_image_key(IMAGE_KEY))
 
         # Save metadata to DB
         new_metadata = ImageMetadata(
@@ -201,7 +198,7 @@ class ImageService:
             raise NotFoundException("Image", key)
 
         resolved_sizes = self._resolve_thumbnail_sizes(thumbnail_sizes)
-        asyncio.create_task(self._ensure_thumbnails_for_image_key(key, resolved_sizes))
+        await self._metadata.request_thumbnails(key, resolved_sizes)
 
     async def delete_image_by_id(self, image_id: str) -> bool:
         metadata = await self.get_image_by_id(image_id)
@@ -230,12 +227,21 @@ class ImageService:
         return await self._images.generate_image_presigned_url(key, ttl)
 
     async def get_thumbnail_presigned_url(
-        self, key: str, thumbnail_size: int | None = None, expires_in: int | None = None
+        self,
+        key: str,
+        thumbnail_size: int | None = None,
+        expires_in: int | None = None,
+        *,
+        ready_sizes: list[int] | None = None,
     ) -> str | None:
         ttl = expires_in or settings.aws_s3_presign_expires
         resolved_size = self._resolve_thumbnail_size(thumbnail_size)
         thumbnail_key = get_thumbnail_name(key, resolved_size)
 
-        await self._ensure_thumbnails_for_image_key(key, [resolved_size])
+        if ready_sizes is None:
+            metadata = await self._metadata.get_image_metadata_by_key(key)
+            ready_sizes = metadata.thumbnail_sizes_ready if metadata else []
+        if resolved_size not in ready_sizes:
+            return None
 
         return await self._images.generate_thumbnail_presigned_url(thumbnail_key, ttl)

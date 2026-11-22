@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -16,6 +16,7 @@ from app.repositories.relationship_care import ensure_relationship_care_indexes
 from app.repositories.relationship_profile import ensure_relationship_profile_indexes
 from app.repositories.xiaobao import ensure_xiaobao_indexes
 from app.schemas.v1.health import HealthResponse
+from app.workers.image_worker import run_image_worker
 from app.workers.mediation_worker import run_mediation_worker
 
 settings = get_settings()
@@ -33,6 +34,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_xiaobao_indexes(get_db())
     worker_stop_event: asyncio.Event | None = None
     worker_task: asyncio.Task[None] | None = None
+    image_stop = asyncio.Event()
+    image_task = (
+        asyncio.create_task(run_image_worker(image_stop)) if settings.image_worker_enabled else None
+    )
 
     if settings.mediation_worker_enabled:
         worker_stop_event = asyncio.Event()
@@ -40,6 +45,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        image_stop.set()
+        if image_task:
+            image_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await image_task
         if worker_stop_event:
             worker_stop_event.set()
         if worker_task:

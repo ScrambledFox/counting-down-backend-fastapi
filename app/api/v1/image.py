@@ -58,9 +58,11 @@ async def list_images(
         ImageMetadataResponse(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
-            thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, ready_sizes=item.thumbnail_sizes_ready
+            ),
             thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
-                item.image_key, settings.thumbnail_xl_size
+                item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
             ),
         )
         for item in items
@@ -83,9 +85,11 @@ async def get_images_for_me(
         ImageMetadataResponse(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
-            thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, ready_sizes=item.thumbnail_sizes_ready
+            ),
             thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
-                item.image_key, settings.thumbnail_xl_size
+                item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
             ),
         )
         for item in items
@@ -107,9 +111,11 @@ async def get_images_by_me(
         ImageMetadataResponse(
             **item.model_dump(),
             url=await img_service.get_image_presigned_url(item.image_key),
-            thumbnail_url=await img_service.get_thumbnail_presigned_url(item.image_key),
+            thumbnail_url=await img_service.get_thumbnail_presigned_url(
+                item.image_key, ready_sizes=item.thumbnail_sizes_ready
+            ),
             thumbnail_xl_url=await img_service.get_thumbnail_presigned_url(
-                item.image_key, settings.thumbnail_xl_size
+                item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
             ),
         )
         for item in items
@@ -127,9 +133,11 @@ async def get_image_metadata(
         raise NotFoundException("Image Metadata", id)
 
     url = await img_service.get_image_presigned_url(metadata.image_key)
-    thumbnail_url = await img_service.get_thumbnail_presigned_url(metadata.image_key)
+    thumbnail_url = await img_service.get_thumbnail_presigned_url(
+        metadata.image_key, ready_sizes=metadata.thumbnail_sizes_ready
+    )
     thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
-        metadata.image_key, settings.thumbnail_xl_size
+        metadata.image_key, settings.thumbnail_xl_size, ready_sizes=metadata.thumbnail_sizes_ready
     )
 
     return ImageMetadataResponse(
@@ -150,9 +158,11 @@ async def create_image_metadata(
     item = await img_service.create_image(image_meta, image)
 
     url = await img_service.get_image_presigned_url(item.image_key)
-    thumbnail_url = await img_service.get_thumbnail_presigned_url(item.image_key)
+    thumbnail_url = await img_service.get_thumbnail_presigned_url(
+        item.image_key, ready_sizes=item.thumbnail_sizes_ready
+    )
     thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
-        item.image_key, settings.thumbnail_xl_size
+        item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
     )
 
     return ImageMetadataResponse(
@@ -173,9 +183,13 @@ async def update_image_metadata(
         raise NotFoundException("Image Metadata", id)
 
     url = await img_service.get_image_presigned_url(updated_metadata.image_key)
-    thumbnail_url = await img_service.get_thumbnail_presigned_url(updated_metadata.image_key)
+    thumbnail_url = await img_service.get_thumbnail_presigned_url(
+        updated_metadata.image_key, ready_sizes=updated_metadata.thumbnail_sizes_ready
+    )
     thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
-        updated_metadata.image_key, settings.thumbnail_xl_size
+        updated_metadata.image_key,
+        settings.thumbnail_xl_size,
+        ready_sizes=updated_metadata.thumbnail_sizes_ready,
     )
 
     return ImageMetadataResponse(
