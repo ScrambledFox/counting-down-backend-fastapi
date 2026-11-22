@@ -87,6 +87,7 @@ class MediationSessionRepository:
             {
                 "latest_advice_id": str(advice_id),
                 "status": MediationSessionStatus.AI_ADVICE_AVAILABLE,
+                "safety_status": SafetyStatus.NORMAL,
             },
         )
 

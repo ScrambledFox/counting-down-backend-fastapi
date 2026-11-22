@@ -4,11 +4,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api.v1.mediation import create_mediation_session
+from app.integrations.openai_client import OpenAIModerationResult, OpenAIStructuredResult
 from app.schemas.v1.exceptions import ConflictException
 from app.schemas.v1.mediation import (
     AIJobStatus,
     MediationAIJob,
     MediationAIJobType,
+    MediationEntityType,
     MediationModerationResult,
     MediationPerspective,
     MediationPerspectiveDraftUpdate,
@@ -77,6 +79,21 @@ def make_moderation() -> MediationModerationResult:
     )
 
 
+def make_output_moderation(
+    safety_status: SafetyStatus = SafetyStatus.NORMAL,
+) -> MediationModerationResult:
+    return MediationModerationResult(
+        id=MODERATION_ID,
+        entity_type=MediationEntityType.AI_REFLECTION,
+        entity_id="pending_reflection:job-id",
+        provider=MediationProvider.INTERNAL,
+        flagged=safety_status == SafetyStatus.BLOCKED,
+        safety_status=safety_status,
+        categories={},
+        created_at=NOW,
+    )
+
+
 def normal_decision() -> ModerationDecision:
     return ModerationDecision(
         flagged=False,
@@ -98,6 +115,18 @@ def blocked_decision() -> ModerationDecision:
         should_block_normal_mediation=True,
         user_message="This mediation needs to pause because the content may involve safety risk.",
     )
+
+
+class FakeOpenAIForModeration:
+    def __init__(self) -> None:
+        self.moderate_text = AsyncMock(
+            return_value=OpenAIModerationResult(
+                flagged=False,
+                categories={"violence": False},
+                category_scores={"violence": 0.0},
+                raw_result={"id": "mod-result"},
+            )
+        )
 
 
 def make_service() -> tuple[MediationService, dict[str, AsyncMock]]:
@@ -333,6 +362,74 @@ async def test_perspective_moderation_job_blocks_unsafe_perspective() -> None:
         SESSION_ID, SafetyStatus.BLOCKED
     )
     repos["jobs"].create_job_if_not_exists.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_internal_safety_filter_allows_benign_hurt_you_phrase() -> None:
+    openai = FakeOpenAIForModeration()
+    service = MediationSafetyService(openai)
+
+    decision = await service.moderate_ai_output(
+        "It may help to name what hurt you before asking for reassurance."
+    )
+
+    assert decision.safety_status == SafetyStatus.NORMAL
+    openai.moderate_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_internal_safety_filter_blocks_direct_threat_phrase() -> None:
+    openai = FakeOpenAIForModeration()
+    service = MediationSafetyService(openai)
+
+    decision = await service.moderate_ai_output("I will kill you.")
+
+    assert decision.safety_status == SafetyStatus.BLOCKED
+    assert decision.categories == {"internal_high_risk_keyword": True}
+    openai.moderate_text.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_private_reflection_persists_blocked_output_moderation_before_raising() -> None:
+    service, repos = make_ai_service()
+    job = MediationAIJob(
+        id="64a7f0c2f1d2c4b5a6e7d8f4",
+        job_type=MediationAIJobType.PRIVATE_REFLECTION,
+        status=AIJobStatus.PROCESSING,
+        session_id=SESSION_ID,
+        source_entity_id=PERSPECTIVE_ID,
+        source_entity_type="PERSPECTIVE",
+        idempotency_key=f"private_reflection:{SESSION_ID}:{PERSPECTIVE_ID}",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+    repos["perspectives"].get_by_id.return_value = make_perspective(PerspectiveStatus.LOCKED)
+    repos["openai"].create_structured_response.return_value = OpenAIStructuredResult(
+        parsed={
+            "emotional_reflection": "It makes sense that this hurt.",
+            "calming_exercise": "Take three slow breaths.",
+            "possible_underlying_needs": ["reassurance"],
+            "things_to_avoid_right_now": ["blame"],
+            "next_best_action": "Ask for a clearer plan.",
+            "neutral_reminder": "This is one perspective.",
+            "safety_note": None,
+        },
+        response_id="resp_test",
+    )
+    repos["safety"].moderate_ai_output.return_value = blocked_decision()
+    repos["moderation"].insert.return_value = make_output_moderation(SafetyStatus.BLOCKED)
+
+    with pytest.raises(RuntimeError, match="AI output blocked by moderation"):
+        await service.generate_private_reflection(job)
+
+    repos["moderation"].insert.assert_awaited_once()
+    inserted = repos["moderation"].insert.await_args.args[0]
+    assert inserted.entity_type == MediationEntityType.AI_REFLECTION
+    assert inserted.safety_status == SafetyStatus.BLOCKED
+    repos["sessions"].set_safety_status.assert_awaited_once_with(
+        SESSION_ID, SafetyStatus.BLOCKED
+    )
+    repos["ai"].insert_reflection.assert_not_called()
 
 
 @pytest.mark.asyncio

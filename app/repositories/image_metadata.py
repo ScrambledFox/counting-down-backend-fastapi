@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from bson import ObjectId
@@ -17,6 +18,41 @@ settings = get_settings()
 class ImageMetadataRepository:
     def __init__(self, db: Annotated[AsyncDB, Depends(get_db)]) -> None:
         self._collection = db[settings.image_metadata_collection_name]
+        self._advents = db[settings.advent_collection_name]
+
+    async def import_completed_advents(self) -> None:
+        """Publish finished calendars on gallery access, including previous years."""
+        now = utc_now()
+        # The entire calendar remains a surprise through December 25 (UTC).
+        cutoff_year = now.year + 1 if (now.month, now.day) >= (12, 26) else now.year
+        cutoff = datetime(cutoff_year, 1, 1, tzinfo=UTC)
+        async for advent in self._advents.find({"uploaded_at": {"$lt": cutoff}}):
+            uploaded_at = advent["uploaded_at"]
+            tags = [
+                "advent",
+                str(uploaded_at.year),
+                f"advent-{uploaded_at.year}-day:{advent['day']}",
+                advent["type"],
+            ]
+            if advent["type"] in ("spicy", "hot"):
+                tags.append("sensitive")
+            # Reuse the source ID and image: repeated requests cannot duplicate gifts.
+            # Insert-only updates preserve gallery edits and soft deletions.
+            await self._collection.update_one(
+                {"_id": advent["_id"]},
+                {
+                    "$setOnInsert": {
+                        "image_key": advent["image_key"],
+                        "uploaded_by": advent["uploaded_by"],
+                        "uploaded_at": uploaded_at,
+                        "title": advent.get("title", "Advent gift"),
+                        "description": advent.get("description", ""),
+                        "media_type": advent.get("content_type"),
+                        "image_tags": tags,
+                    }
+                },
+                upsert=True,
+            )
 
     async def create_image_metadata(self, metadata: ImageMetadata) -> ImageMetadata:
         result = await self._collection.insert_one(

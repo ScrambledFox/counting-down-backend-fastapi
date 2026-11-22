@@ -137,6 +137,7 @@ class ImageService:
         self, limit: int, cursor: str | None, user_filter: UserType | None = None
     ) -> tuple[list[ImageMetadata], str | None]:
         decoded_cursor = decode_image_cursor(cursor) if cursor else None
+        await self._metadata.import_completed_advents()
         docs = await self._metadata.list_image_metadata_page(limit + 1, decoded_cursor, user_filter)
 
         has_more = len(docs) > limit

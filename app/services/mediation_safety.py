@@ -64,14 +64,11 @@ class MediationSafetyService:
             "suicide",
             "kill myself",
             "kill you",
-            "hurt you",
-            "hit me",
-            "hit you",
-            "threat",
             "coercion",
             "stalking",
             "retaliation",
         ]
+
         if any(term in lowered for term in high_risk_terms):
             return ModerationDecision(
                 flagged=True,
