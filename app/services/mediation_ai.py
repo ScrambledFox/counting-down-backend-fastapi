@@ -186,8 +186,9 @@ class MediationAIService:
         output_text: str,
         entity_type: MediationEntityType,
         entity_id: str,
+        decision: ModerationDecision | None = None,
     ) -> MediationModerationResult:
-        decision = await self._safety.moderate_ai_output(output_text)
+        decision = decision or await self._safety.moderate_ai_output(output_text)
         result = MediationModerationResult(
             entity_type=entity_type,
             entity_id=entity_id,
@@ -203,10 +204,10 @@ class MediationAIService:
         )
         return await self._moderation.insert(result)
 
-    async def _block_if_output_unsafe(
-        self, job: MediationAIJob, decision: ModerationDecision
+    async def _raise_if_output_blocked(
+        self, job: MediationAIJob, moderation: MediationModerationResult
     ) -> None:
-        if decision.should_block_normal_mediation:
+        if moderation.safety_status == SafetyStatus.BLOCKED:
             await self._sessions.set_safety_status(job.session_id, SafetyStatus.BLOCKED)
             raise RuntimeError("AI output blocked by moderation")
 
@@ -233,13 +234,15 @@ class MediationAIService:
             safety_identifier=f"mediation:{job.session_id}:{perspective.user_type}",
         )
         content = PrivateReflectionOutput.model_validate(result.parsed)
-        decision = await self._safety.moderate_ai_output(content.model_dump_json())
-        await self._block_if_output_unsafe(job, decision)
+        output_text = content.model_dump_json()
+        decision = await self._safety.moderate_ai_output(output_text)
         moderation = await self._persist_output_moderation(
-            output_text=content.model_dump_json(),
+            output_text=output_text,
             entity_type=MediationEntityType.AI_REFLECTION,
             entity_id=f"pending_reflection:{job.id}",
+            decision=decision,
         )
+        await self._raise_if_output_blocked(job, moderation)
         await self._ai.insert_reflection(
             MediationAIReflection(
                 session_id=job.session_id,
@@ -277,11 +280,17 @@ class MediationAIService:
             safety_identifier=f"mediation:{job.session_id}:shared",
         )
         content = SharedMediationAdviceOutput.model_validate(result.parsed)
+        output_text = content.model_dump_json()
+
+        decision = await self._safety.moderate_ai_output(output_text)
         moderation = await self._persist_output_moderation(
-            output_text=content.model_dump_json(),
+            output_text=output_text,
             entity_type=MediationEntityType.AI_ADVICE,
             entity_id=f"pending_advice:{job.id}",
+            decision=decision,
         )
+
+        await self._raise_if_output_blocked(job, moderation)
         advice = await self._ai.insert_advice(
             MediationAdvice(
                 session_id=job.session_id,
@@ -324,13 +333,15 @@ class MediationAIService:
             safety_identifier=f"mediation:{job.session_id}:comment",
         )
         content = CommentAIResponseOutput.model_validate(result.parsed)
-        decision = await self._safety.moderate_ai_output(content.model_dump_json())
-        await self._block_if_output_unsafe(job, decision)
-        await self._persist_output_moderation(
-            output_text=content.model_dump_json(),
+        output_text = content.model_dump_json()
+        decision = await self._safety.moderate_ai_output(output_text)
+        moderation = await self._persist_output_moderation(
+            output_text=output_text,
             entity_type=MediationEntityType.AI_COMMENT,
             entity_id=f"pending_ai_comment:{job.id}",
+            decision=decision,
         )
+        await self._raise_if_output_blocked(job, moderation)
         await self._comments.create_ai_comment(
             job.session_id,
             str(comment.id),

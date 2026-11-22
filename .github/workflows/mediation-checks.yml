@@ -1,0 +1,40 @@
+name: Mediation regression checks
+
+on:
+  push:
+    branches: [fix/mediation-output-moderation]
+  pull_request:
+    branches: [master]
+    paths:
+      - app/services/mediation*.py
+      - app/repositories/mediation.py
+      - tests/v1/test_mediation_unit.py
+      - .github/workflows/mediation-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      MONGO_URL: mongodb://127.0.0.1:27017
+      MONGO_APP_NAME: test
+      OPENAI_API_KEY: test-placeholder
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dependencies
+        run: |
+          python -m pip install uv
+          uv pip install --system -r pyproject.toml
+      - name: Run mediation and related feature tests
+        run: >-
+          python -m pytest -v --maxfail=1
+          tests/v1/test_mediation_unit.py
+          tests/v1/test_xiaobao_unit.py
+          tests/v1/test_relationship_care_unit.py
+          tests/v1/test_relationship_profile_unit.py
