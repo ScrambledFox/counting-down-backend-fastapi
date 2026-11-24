@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from cryptography.fernet import Fernet
 from pydantic import Field, field_validator, model_validator
@@ -14,6 +15,11 @@ class Settings(BaseSettings):
 
     mongo_url: str = "mongodb://localhost:27017"
     mongo_app_name: str = "counting_down_app"
+    # Connections per process. Keep it small for serverless functions, where every concurrent
+    # instance opens its own pool.
+    mongo_max_pool_size: int = Field(default=100, ge=1)
+    # Create indexes during web startup. Disable when scripts/ensure_indexes.py runs at deploy.
+    ensure_indexes_on_startup: bool = True
 
     todos_collection_name: str = "todos"
     messages_collection_name: str = "messages"
@@ -102,6 +108,11 @@ class Settings(BaseSettings):
     xiaobao_web_push_retry_max_seconds: float = 900.0
     xiaobao_web_push_ttl_seconds: int = 300
     mediation_worker_enabled: bool = False
+    # Run the routine clock, routine runs and push delivery inside the web process.
+    xiaobao_in_process_jobs_enabled: bool = False
+    # How the web process signals the background job runner after creating work.
+    job_wakeup_mode: Literal["none", "lambda"] = "none"
+    job_wakeup_lambda_function_name: str | None = None
     mediation_worker_poll_interval_seconds: float = 2.0
     mediation_job_processing_timeout_seconds: float = 300.0
 
@@ -194,6 +205,12 @@ class Settings(BaseSettings):
                     raise ValueError("XIAOBAO_WEB_PUSH_VAPID_SUBJECT must be mailto: or HTTPS")
                 if self.xiaobao_web_push_ttl_seconds <= 0:
                     raise ValueError("XIAOBAO_WEB_PUSH_TTL_SECONDS must be positive")
+        return self
+
+    @model_validator(mode="after")
+    def require_wakeup_target(self) -> Settings:
+        if self.job_wakeup_mode == "lambda" and not self.job_wakeup_lambda_function_name:
+            raise ValueError("JOB_WAKEUP_MODE=lambda requires JOB_WAKEUP_LAMBDA_FUNCTION_NAME")
         return self
 
     @property

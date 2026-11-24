@@ -10,8 +10,10 @@ settings = get_settings()
 
 
 class MotorMongoDBClient:
-    def __init__(self, uri: str) -> None:
-        self._client: AsyncClient = AsyncIOMotorClient(uri, uuidRepresentation="standard")
+    def __init__(self, uri: str, max_pool_size: int = 100) -> None:
+        self._client: AsyncClient = AsyncIOMotorClient(
+            uri, uuidRepresentation="standard", maxPoolSize=max_pool_size
+        )
 
     @property
     def client(self) -> AsyncClient:
@@ -29,7 +31,7 @@ def get_mongo_client() -> MongoDBClient:
     :return: A cached singleton MongoDB client instance.
     :rtype: MongoDBClient
     """
-    return MotorMongoDBClient(settings.mongo_url)
+    return MotorMongoDBClient(settings.mongo_url, settings.mongo_max_pool_size)
 
 
 def get_db() -> AsyncDB:

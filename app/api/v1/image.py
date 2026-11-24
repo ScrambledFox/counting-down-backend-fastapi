@@ -19,12 +19,15 @@ from app.schemas.v1.image import (
 from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.user import UserType
 from app.services.image import ImageService
+from app.services.job_wakeup import JobWakeup, get_job_wakeup
+from app.workers.job_runner import JobKind
 
 router = make_router(prefix="/images")
 
 settings = get_settings()
 
 ImageServiceDependency = Annotated[ImageService, Depends()]
+JobWakeupDependency = Annotated[JobWakeup, Depends(get_job_wakeup)]
 
 
 def _parse_image_metadata_form(
@@ -163,10 +166,12 @@ async def get_image_metadata(
 async def create_image_metadata(
     image_meta: Annotated[ImageMetadataCreate, Depends(_parse_image_metadata_form)],
     img_service: ImageServiceDependency,
+    job_wakeup: JobWakeupDependency,
     image: UploadFile = File(...),
     _: SessionResponse = Depends(require_session),
 ) -> ImageMetadataResponse:
     item = await img_service.create_image(image_meta, image)
+    await job_wakeup.wake(JobKind.IMAGE)
 
     url = await img_service.get_image_presigned_url(item.image_key)
     thumbnail_url = await img_service.get_thumbnail_presigned_url(
@@ -280,6 +285,7 @@ async def get_image_presigned_url(
 async def request_thumbnail_generation(
     image_key: str,
     service: ImageServiceDependency,
+    job_wakeup: JobWakeupDependency,
     thumbnail_sizes: list[ImageThumbnailSizes] = Query(
         [ImageThumbnailSizes.MEDIUM],
         description="List of thumbnail sizes to generate. If not provided, "
@@ -291,12 +297,13 @@ async def request_thumbnail_generation(
         le=settings.thumbnail_max_size,
         description="Optional list of custom thumbnail sizes to generate.",
     ),
-):
+) -> dict[str, str]:
     resolved_sizes = [size.value for size in thumbnail_sizes]
     if custom_thumbnail_sizes:
         resolved_sizes.extend(custom_thumbnail_sizes)
 
     await service.request_thumbnail_generation(image_key, resolved_sizes)
+    await job_wakeup.wake(JobKind.IMAGE)
     return {"message": "Thumbnail generation requested successfully"}
 
 

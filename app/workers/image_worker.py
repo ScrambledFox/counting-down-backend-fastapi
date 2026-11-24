@@ -3,8 +3,8 @@ from functools import partial
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.db.mongo_client import get_db
 from app.db.s3_client import get_s3_storage
+from app.models.mongo import AsyncDB
 from app.repositories.image import ImageRepository
 from app.repositories.image_jobs import ImageJobRepository
 from app.repositories.image_metadata import ImageMetadataRepository
@@ -12,6 +12,8 @@ from app.services.image import ImageService
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+IMAGE_JOB_TIMEOUT_SECONDS = 120
 
 
 async def process_advent(jobs: ImageJobRepository, service: ImageService, job: dict) -> None:
@@ -34,45 +36,34 @@ async def process_thumbnail(jobs: ImageJobRepository, service: ImageService, job
     await jobs.finish_thumbnail(job, sizes)
 
 
-async def run_image_worker(stop_event: asyncio.Event) -> None:
-    """Sequential work bounds CPU/storage load; durable leases survive restarts."""
-    while not stop_event.is_set():
+async def process_one_image_job(jobs: ImageJobRepository, service: ImageService) -> bool:
+    """Claim and process at most one advent archive or thumbnail job.
+
+    Sequential work bounds CPU and storage load; durable leases survive restarts.
+    """
+    for field, collection, claim, process in (
+        ("archive", jobs.advents, jobs.claim_advent, process_advent),
+        (
+            "thumbnail_job",
+            jobs.images,
+            partial(jobs.claim_thumbnail, service._get_configured_thumbnail_sizes()),
+            process_thumbnail,
+        ),
+    ):
+        job = await claim()
+        if job is None:
+            continue
         try:
-            db = get_db()
-            jobs = ImageJobRepository(db)
-            service = ImageService(ImageRepository(get_s3_storage()), ImageMetadataRepository(db))
-            await jobs.ensure_indexes()
-            while not stop_event.is_set():
-                worked = False
-                for field, collection, claim, process in (
-                    ("archive", jobs.advents, jobs.claim_advent, process_advent),
-                    (
-                        "thumbnail_job",
-                        jobs.images,
-                        partial(jobs.claim_thumbnail, service._get_configured_thumbnail_sizes()),
-                        process_thumbnail,
-                    ),
-                ):
-                    job = await claim()
-                    if job is None:
-                        continue
-                    worked = True
-                    try:
-                        # Finish or release well before the five-minute lease expires.
-                        await asyncio.wait_for(process(jobs, service, job), timeout=120)
-                    except Exception as exc:
-                        logger.exception("Image background job failed: %s", field)
-                        await jobs.fail(collection, field, job, exc)
-                if not worked:
-                    try:
-                        await asyncio.wait_for(
-                            stop_event.wait(), settings.image_worker_poll_seconds
-                        )
-                    except TimeoutError:
-                        pass
-        except Exception:
-            logger.exception("Image worker disconnected; retrying")
-            try:
-                await asyncio.wait_for(stop_event.wait(), settings.image_worker_poll_seconds)
-            except TimeoutError:
-                pass
+            # Finish or release well before the five-minute lease expires.
+            await asyncio.wait_for(process(jobs, service, job), timeout=IMAGE_JOB_TIMEOUT_SECONDS)
+        except Exception as exc:
+            logger.exception("Image background job failed: %s", field)
+            await jobs.fail(collection, field, job, exc)
+        return True
+    return False
+
+
+def build_image_job_services(db: AsyncDB) -> tuple[ImageJobRepository, ImageService]:
+    jobs = ImageJobRepository(db)
+    service = ImageService(ImageRepository(get_s3_storage()), ImageMetadataRepository(db))
+    return jobs, service

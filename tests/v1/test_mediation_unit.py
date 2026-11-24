@@ -25,6 +25,7 @@ from app.schemas.v1.mediation import (
 )
 from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.user import UserType
+from app.services.job_wakeup import NoopJobWakeup
 from app.services.mediation import MediationService
 from app.services.mediation_ai import MediationAIService
 from app.services.mediation_safety import MediationSafetyService, ModerationDecision
@@ -123,6 +124,7 @@ def make_service() -> tuple[MediationService, dict[str, AsyncMock]]:
             moderation_repo=repos["moderation"],
             job_repo=repos["jobs"],
             safety_service=repos["safety"],
+            job_wakeup=NoopJobWakeup(),
         ),
         repos,
     )

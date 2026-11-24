@@ -1,7 +1,6 @@
-import asyncio
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -40,7 +39,6 @@ from app.services.xiaobao_routine import XiaoBaoRoutineService
 from app.services.xiaobao_routine_execution import XiaoBaoRoutineExecutionService
 from app.services.xiaobao_schedule import next_scheduled_at
 from app.util.time import utc_now
-from app.workers import xiaobao_routine_clock
 from app.workers.xiaobao_routine_clock import (
     auto_pause_unread_inactive_routines,
     materialize_due_routines,
@@ -377,52 +375,41 @@ async def test_inbox_route_forwards_owner_safe_filter_and_opaque_cursor() -> Non
 
 
 @pytest.mark.asyncio
-async def test_clock_initializes_message_indexes_before_repositories(monkeypatch) -> None:
+async def test_message_indexes_are_created_before_routine_indexes(monkeypatch) -> None:
+    from app.db import indexes
+
     calls: list[str] = []
 
-    async def ensure_messages(_db) -> None:
-        calls.append("message_indexes")
-
-    async def ensure_routines(_db) -> None:
-        calls.append("routine_indexes")
-
-    def repository(name: str):
-        def build(_db):
+    def record(name: str):
+        async def ensure(_db) -> None:
             calls.append(name)
-            return MagicMock()
 
-        return build
+        return ensure
 
-    monkeypatch.setattr(xiaobao_routine_clock, "get_db", lambda: object())
-    monkeypatch.setattr(xiaobao_routine_clock, "ensure_xiaobao_indexes", ensure_messages)
-    monkeypatch.setattr(xiaobao_routine_clock, "ensure_xiaobao_routine_indexes", ensure_routines)
-    monkeypatch.setattr(
-        xiaobao_routine_clock, "XiaoBaoRoutineRepository", repository("routine_repo")
-    )
-    monkeypatch.setattr(
-        xiaobao_routine_clock, "XiaoBaoRoutineRunRepository", repository("run_repo")
-    )
-    monkeypatch.setattr(
-        xiaobao_routine_clock,
-        "XiaoBaoConversationRepository",
-        repository("conversation_repo"),
-    )
-    monkeypatch.setattr(
-        xiaobao_routine_clock, "XiaoBaoMessageRepository", repository("message_repo")
-    )
-    stop_event = asyncio.Event()
-    stop_event.set()
+    for name in (
+        "ensure_mediation_indexes",
+        "ensure_airport_indexes",
+        "ensure_relationship_care_indexes",
+        "ensure_relationship_profile_indexes",
+        "ensure_xiaobao_indexes",
+        "ensure_xiaobao_routine_indexes",
+        "ensure_xiaobao_push_indexes",
+    ):
+        monkeypatch.setattr(indexes, name, record(name))
 
-    await xiaobao_routine_clock.run_xiaobao_routine_clock(stop_event)
+    class FakeImageJobs:
+        def __init__(self, _db) -> None:
+            pass
 
-    assert calls == [
-        "message_indexes",
-        "routine_indexes",
-        "routine_repo",
-        "run_repo",
-        "conversation_repo",
-        "message_repo",
-    ]
+        async def ensure_indexes(self) -> None:
+            calls.append("image_jobs")
+
+    monkeypatch.setattr(indexes, "ImageJobRepository", FakeImageJobs)
+
+    await indexes.ensure_all_indexes(object())
+
+    assert calls.index("ensure_xiaobao_indexes") < calls.index("ensure_xiaobao_routine_indexes")
+    assert "image_jobs" in calls
 
 
 def test_nonexistent_local_time_moves_forward_to_first_valid_instant() -> None:

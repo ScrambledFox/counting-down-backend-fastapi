@@ -1,13 +1,10 @@
-import asyncio
-
 from app.core import logging
 from app.core.config import get_settings
-from app.db.mongo_client import get_db
+from app.models.mongo import AsyncDB
 from app.repositories.xiaobao import XiaoBaoConversationRepository, XiaoBaoMessageRepository
 from app.repositories.xiaobao_push import (
     XiaoBaoPushDeliveryRepository,
     XiaoBaoPushSubscriptionRepository,
-    ensure_xiaobao_push_indexes,
 )
 from app.services.xiaobao_push import (
     PyWebPushTransport,
@@ -52,9 +49,9 @@ async def process_one_xiaobao_push_work_item(
     return True
 
 
-async def run_xiaobao_push_worker(stop_event: asyncio.Event | None = None) -> None:
-    db = get_db()
-    await ensure_xiaobao_push_indexes(db)
+def build_push_services(
+    db: AsyncDB,
+) -> tuple[XiaoBaoPushDispatchService, XiaoBaoPushDeliveryService, XiaoBaoPushDeliveryRepository]:
     subscriptions = XiaoBaoPushSubscriptionRepository(db)
     deliveries = XiaoBaoPushDeliveryRepository(db)
     dispatch = XiaoBaoPushDispatchService(
@@ -63,11 +60,4 @@ async def run_xiaobao_push_worker(stop_event: asyncio.Event | None = None) -> No
     delivery = XiaoBaoPushDeliveryService(
         subscriptions, deliveries, XiaoBaoMessageRepository(db), PyWebPushTransport()
     )
-    while stop_event is None or not stop_event.is_set():
-        processed = await process_one_xiaobao_push_work_item(dispatch, delivery, deliveries)
-        if not processed:
-            await asyncio.sleep(settings.xiaobao_web_push_worker_poll_interval_seconds)
-
-
-if __name__ == "__main__":
-    asyncio.run(run_xiaobao_push_worker())
+    return dispatch, delivery, deliveries

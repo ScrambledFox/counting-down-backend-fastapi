@@ -1,10 +1,9 @@
-import asyncio
 from typing import Any, cast
 
 from app.core import logging
 from app.core.config import get_settings
-from app.db.mongo_client import get_db
 from app.integrations.openai_client import OpenAIClient
+from app.models.mongo import AsyncDB
 from app.repositories.relationship_care import (
     AgreementAcceptanceRepository,
     AgreementResponseRepository,
@@ -19,12 +18,10 @@ from app.repositories.todo import TodoRepository
 from app.repositories.xiaobao import (
     XiaoBaoConversationRepository,
     XiaoBaoMessageRepository,
-    ensure_xiaobao_indexes,
 )
 from app.repositories.xiaobao_routine import (
     XiaoBaoRoutineRepository,
     XiaoBaoRoutineRunRepository,
-    ensure_xiaobao_routine_indexes,
 )
 from app.schemas.v1.xiaobao_routine import XiaoBaoRoutineKind, XiaoBaoRoutineRunStatus
 from app.services.relationship_care import RelationshipCareService
@@ -55,12 +52,13 @@ async def _finish_terminal_reminder_failure(
         )
 
 
-def build_routine_execution_service() -> tuple[
+def build_routine_execution_service(
+    db: AsyncDB,
+) -> tuple[
     XiaoBaoRoutineExecutionService,
     XiaoBaoRoutineRepository,
     XiaoBaoRoutineRunRepository,
 ]:
-    db = get_db()
     routines = XiaoBaoRoutineRepository(db)
     runs = XiaoBaoRoutineRunRepository(db)
     todos = TodoService(TodoRepository(db))
@@ -147,18 +145,3 @@ async def process_one_xiaobao_routine_work_item(
         failed = await runs.mark_failed_or_retry(run, type(exc).__name__)
         await _finish_terminal_reminder_failure(routines, failed)
     return True
-
-
-async def run_xiaobao_routine_worker(stop_event: asyncio.Event | None = None) -> None:
-    db = get_db()
-    await ensure_xiaobao_indexes(db)
-    await ensure_xiaobao_routine_indexes(db)
-    service, routines, runs = build_routine_execution_service()
-    while stop_event is None or not stop_event.is_set():
-        processed = await process_one_xiaobao_routine_work_item(service, routines, runs)
-        if not processed:
-            await asyncio.sleep(settings.xiaobao_routine_worker_poll_interval_seconds)
-
-
-if __name__ == "__main__":
-    asyncio.run(run_xiaobao_routine_worker())

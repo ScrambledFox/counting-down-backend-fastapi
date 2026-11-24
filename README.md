@@ -83,12 +83,9 @@ behavior. Weekdays are integers from Monday `0` through Sunday `6`. Event-based
 `TRIGGER` scheduling is intentionally not supported yet and must not be represented as a calendar
 schedule. A proposed routine or reminder remains a review card until its owner accepts it.
 
-Routine execution is split into two durable Mongo-backed process types:
-
-```text
-clock:  python -m app.workers.xiaobao_routine_clock
-worker: python -m app.workers.xiaobao_routine_worker
-```
+Routine execution uses two durable Mongo-backed queues, a clock that materializes due occurrences
+and a worker step that executes them. Both run inside the consolidated background job runner
+described under [Background jobs](#background-jobs).
 
 The clock materializes uniquely keyed occurrences and advances schedules atomically. The worker
 claims runs with expiring leases and bounded retry backoff. It rebuilds fresh relationship-care
@@ -133,7 +130,7 @@ ordering without assuming transactions across the routines and messages collecti
 Web Push is disabled by default. When configured with the `XIAOBAO_WEB_PUSH_*` VAPID and
 subscription-encryption values, browsers can register an authenticated device at
 `/api/v1/xiaobao/push/subscriptions`. Subscriptions are encrypted at rest and list responses never
-expose endpoints or encryption keys. A separate `push-worker` process delivers a fixed encrypted
+expose endpoints or encryption keys. The background job runner delivers a fixed encrypted
 payload containing only an inbox message identifier; the frontend service worker owns the generic
 lock-screen text and navigation. Inbox persistence remains authoritative: a completed private inbox
 message is queued for push afterward, and push errors never retry generation, alter read state, or
@@ -143,6 +140,43 @@ Live-model checks are opt-in and use synthetic content:
 
 ```bash
 RUN_XIAOBAO_LIVE_EVALS=1 uv run pytest -m live_ai tests/live/test_xiaobao_live.py
+```
+
+## Background jobs
+
+All background work lives in durable MongoDB queues with leases, attempt limits and duplicate
+guards: the routine clock, routine runs, Web Push delivery, mediation AI and image processing. One
+runner (`app/workers/job_runner.py`) calls each queue's single-item function. Stopping it at any
+point is safe: an interrupted item keeps its lease and is retried after the lease expires.
+
+```bash
+python -m app.workers.drain            # process available work, then exit
+python -m app.workers.drain --loop     # keep polling (local development, Heroku `worker`)
+python -m app.workers.drain --kinds push,clock --max-seconds 120
+```
+
+The clock and push queues run in their own lane, so a long AI generation never delays
+notifications or due routines. Delivery is at-least-once: a crash after a push is sent but before
+it is recorded can repeat it, and the service worker collapses repeats through the notification
+tag.
+
+The web process can also work on queues itself, controlled by `IMAGE_WORKER_ENABLED` (default on),
+`MEDIATION_WORKER_ENABLED` and `XIAOBAO_IN_PROCESS_JOBS_ENABLED` (clock, routines and push). When
+`JOB_WAKEUP_MODE=lambda`, the API asynchronously invokes `JOB_WAKEUP_LAMBDA_FUNCTION_NAME` after
+creating work; the wake-up carries queue names only and is a hint, since scheduled runs pick up
+anything it misses.
+
+`app/lambda_jobs.py` is the AWS Lambda entry point. The `Dockerfile` builds two arm64 targets from
+the same dependency and source layers: `api` (uvicorn behind the Lambda Web Adapter, streaming) and
+`jobs` (the Lambda handler). See `docs/adr/0001-serverless-background-jobs.md`.
+
+## Database indexes
+
+Indexes are idempotent. They are created at web startup unless `ENSURE_INDEXES_ON_STARTUP=false`,
+in which case run them once per deploy:
+
+```bash
+python scripts/ensure_indexes.py
 ```
 
 ## Seeding airports

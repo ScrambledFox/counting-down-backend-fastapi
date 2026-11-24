@@ -1,0 +1,15 @@
+# Never ship local secrets or environment files.
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.venv
+.mypy_cache
+.ruff_cache
+.pytest_cache
+**/__pycache__
+*.pyc
+tests
+docs
