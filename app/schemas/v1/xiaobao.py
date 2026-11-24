@@ -260,11 +260,13 @@ class XiaoBaoProposal(CustomModel):
             raise ValueError(f"Payload does not match proposal type {self.type.value}")
         if (
             self.type == XiaoBaoProposalType.ROUTINE
+            and isinstance(self.payload, XiaoBaoRoutineCreate)
             and self.payload.kind != XiaoBaoRoutineKind.ROUTINE
         ):
             raise ValueError("Routine proposals require a recurring routine payload")
         if (
             self.type == XiaoBaoProposalType.REMINDER
+            and isinstance(self.payload, XiaoBaoRoutineCreate)
             and self.payload.kind != XiaoBaoRoutineKind.REMINDER
         ):
             raise ValueError("Reminder proposals require a one-time reminder payload")

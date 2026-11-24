@@ -42,6 +42,8 @@ async def materialize_due_routines(
         if not routine.id or str(routine.id) in excluded_routine_ids:
             continue
         scheduled_for = routine.next_run_at
+        if scheduled_for is None:  # list_due only returns routines with a due next_run_at
+            continue
         await runs.materialize(
             XiaoBaoRoutineRun(
                 routine_id=str(routine.id),

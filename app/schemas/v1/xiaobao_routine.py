@@ -88,7 +88,7 @@ class XiaoBaoRoutineSchedule(CustomModel):
                 raise ValueError("one-time schedules require local_date")
             local_naive = datetime.combine(
                 self.local_date,
-                time(*(int(part) for part in self.local_time.split(":"))),
+                time.fromisoformat(self.local_time),
             )
             timezone = ZoneInfo(self.timezone)
             valid = any(

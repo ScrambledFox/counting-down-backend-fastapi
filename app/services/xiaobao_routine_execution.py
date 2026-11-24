@@ -1,6 +1,6 @@
 import json
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
@@ -261,7 +261,7 @@ class XiaoBaoRoutineExecutionService:
             async def discard_delta(_delta: str) -> None:
                 return None
 
-            input_items = [
+            input_items: list[dict[str, Any]] = [
                 {"role": "developer", "content": ROUTINE_SYSTEM_PROMPT},
                 {
                     "role": "developer",
