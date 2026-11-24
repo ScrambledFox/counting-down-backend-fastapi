@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from bson import ObjectId
 
 from app.core.config import Settings
 from app.repositories.xiaobao_push import (
@@ -259,3 +260,37 @@ async def test_stale_final_claim_is_terminalized_without_resend() -> None:
     assert query["attempt_count"] == {"$gte": xiaobao_push.settings.xiaobao_web_push_max_attempts}
     assert update["$set"]["status"] == XiaoBaoPushDeliveryStatus.FAILED
     assert update["$set"]["error_code"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_returns_the_winning_delivery_after_an_upsert_race() -> None:
+    from pymongo.errors import DuplicateKeyError
+
+    stored = {
+        "_id": ObjectId("64b64c000000000000000201"),
+        "kind": "TEST",
+        "owner_user_type": UserType.JORIS.value,
+        "subscription_id": "64b64c000000000000000202",
+        "client_test_id": "same",
+        "status": "PENDING",
+        "attempt_count": 0,
+        "available_at": utc_now(),
+        "created_at": utc_now(),
+        "updated_at": utc_now(),
+    }
+
+    class RacingCollection:
+        async def find_one_and_update(self, *_args: object, **_kwargs: object) -> None:
+            raise DuplicateKeyError("E11000 duplicate key")
+
+        async def find_one(self, _key: object) -> dict:
+            return stored
+
+    deliveries = XiaoBaoPushDeliveryRepository.__new__(XiaoBaoPushDeliveryRepository)
+    deliveries._collection = RacingCollection()  # type: ignore[assignment]
+
+    result = await deliveries.enqueue_test(
+        owner=UserType.JORIS, subscription_id="64b64c000000000000000202", client_test_id="same"
+    )
+
+    assert str(result.id) == "64b64c000000000000000201"

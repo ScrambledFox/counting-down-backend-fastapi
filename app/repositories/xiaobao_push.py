@@ -7,6 +7,7 @@ from bson import ObjectId
 from cryptography.fernet import Fernet
 from fastapi import Depends
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from app.core.config import get_settings
 from app.db.mongo_client import get_db
@@ -126,60 +127,67 @@ class XiaoBaoPushDeliveryRepository:
         self._collection = db[settings.xiaobao_push_deliveries_collection_name]
         self._messages = db[settings.xiaobao_messages_collection_name]
 
+    async def _upsert_once(self, key: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+        """Insert ``document`` unless a delivery with ``key`` exists; return the stored one.
+
+        Concurrent upserts with the same unique key can race; the loser reads the winner.
+        """
+        doc: dict[str, Any] | None
+        try:
+            doc = await self._collection.find_one_and_update(
+                key,
+                {"$setOnInsert": document},
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+            )
+        except DuplicateKeyError:
+            doc = await self._collection.find_one(key)
+        if not doc:
+            raise RuntimeError("Xiao Bao push delivery could not be enqueued")
+        return doc
+
     async def enqueue_message(
         self, *, message_id: MongoId, owner: UserType, subscription_id: MongoId
     ) -> XiaoBaoPushDelivery:
         now = utc_now()
-        doc = await self._collection.find_one_and_update(
+        doc = await self._upsert_once(
             {
                 "kind": XiaoBaoPushDeliveryKind.INBOX_MESSAGE,
                 "message_id": str(message_id),
                 "subscription_id": str(subscription_id),
             },
-            {
-                "$setOnInsert": XiaoBaoPushDelivery(
-                    kind=XiaoBaoPushDeliveryKind.INBOX_MESSAGE,
-                    owner_user_type=owner,
-                    message_id=str(message_id),
-                    subscription_id=str(subscription_id),
-                    available_at=now,
-                    created_at=now,
-                    updated_at=now,
-                ).model_dump(mode="python", by_alias=True, exclude_none=True)
-            },
-            upsert=True,
-            return_document=ReturnDocument.AFTER,
+            XiaoBaoPushDelivery(
+                kind=XiaoBaoPushDeliveryKind.INBOX_MESSAGE,
+                owner_user_type=owner,
+                message_id=str(message_id),
+                subscription_id=str(subscription_id),
+                available_at=now,
+                created_at=now,
+                updated_at=now,
+            ).model_dump(mode="python", by_alias=True, exclude_none=True),
         )
-        if not doc:
-            raise RuntimeError("Xiao Bao push delivery could not be enqueued")
         return XiaoBaoPushDelivery.model_validate(doc)
 
     async def enqueue_test(
         self, *, owner: UserType, subscription_id: MongoId, client_test_id: str
     ) -> XiaoBaoPushDelivery:
         now = utc_now()
-        doc = await self._collection.find_one_and_update(
+        doc = await self._upsert_once(
             {
                 "kind": XiaoBaoPushDeliveryKind.TEST,
                 "subscription_id": str(subscription_id),
                 "client_test_id": client_test_id,
             },
-            {
-                "$setOnInsert": XiaoBaoPushDelivery(
-                    kind=XiaoBaoPushDeliveryKind.TEST,
-                    owner_user_type=owner,
-                    subscription_id=str(subscription_id),
-                    client_test_id=client_test_id,
-                    available_at=now,
-                    created_at=now,
-                    updated_at=now,
-                ).model_dump(mode="python", by_alias=True, exclude_none=True)
-            },
-            upsert=True,
-            return_document=ReturnDocument.AFTER,
+            XiaoBaoPushDelivery(
+                kind=XiaoBaoPushDeliveryKind.TEST,
+                owner_user_type=owner,
+                subscription_id=str(subscription_id),
+                client_test_id=client_test_id,
+                available_at=now,
+                created_at=now,
+                updated_at=now,
+            ).model_dump(mode="python", by_alias=True, exclude_none=True),
         )
-        if not doc:
-            raise RuntimeError("Xiao Bao push test could not be enqueued")
         return XiaoBaoPushDelivery.model_validate(doc)
 
     async def claim_next(self, *, lease_seconds: float) -> XiaoBaoPushDelivery | None:
