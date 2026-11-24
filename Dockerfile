@@ -32,6 +32,7 @@ COPY scripts ./scripts
 # Indexes are created by scripts/ensure_indexes.py at deploy time, and background queues are
 # served by the jobs function, not by API instances.
 ENV ENSURE_INDEXES_ON_STARTUP=false \
+    LOG_FORMAT=json \
     IMAGE_WORKER_ENABLED=false \
     MEDIATION_WORKER_ENABLED=false \
     XIAOBAO_IN_PROCESS_JOBS_ENABLED=false

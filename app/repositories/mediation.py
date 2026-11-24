@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from datetime import timedelta
 from typing import Annotated, Any
+from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import Depends
@@ -34,6 +35,24 @@ settings = get_settings()
 
 def _oid(value: MongoId | str | None) -> ObjectId | None:
     return ObjectId(value) if value else None
+
+
+async def _insert_once_per_job(collection: Any, document: dict[str, Any]) -> dict[str, Any] | None:
+    """Insert an AI output, at most once per producing job.
+
+    A retried or superseded job run that reaches persistence again receives the output already
+    stored for that job instead of creating a duplicate. Outputs without a job are plain inserts.
+    """
+    job_id = document.get("ai_job_id")
+    if job_id is None:
+        result = await collection.insert_one(document)
+        return await collection.find_one({"_id": result.inserted_id})
+    return await collection.find_one_and_update(
+        {"ai_job_id": job_id},
+        {"$setOnInsert": document},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 class MediationSessionRepository:
@@ -254,10 +273,12 @@ class MediationAIRepository:
             [("session_id", ASCENDING), ("recipient_user_type", ASCENDING)]
         )
         await self._advices.create_index([("session_id", ASCENDING), ("created_at", DESCENDING)])
+        # Non-unique so legacy documents can never block startup; lookups for per-job writes.
+        await self._reflections.create_index([("ai_job_id", ASCENDING)], sparse=True)
+        await self._advices.create_index([("ai_job_id", ASCENDING)], sparse=True)
 
     async def insert_reflection(self, reflection: MediationAIReflection) -> MediationAIReflection:
-        result = await self._reflections.insert_one(reflection.serialize())
-        doc = await self._reflections.find_one({"_id": result.inserted_id})
+        doc = await _insert_once_per_job(self._reflections, reflection.serialize())
         return MediationAIReflection.model_validate(doc)
 
     async def get_reflection_for_user(
@@ -270,8 +291,7 @@ class MediationAIRepository:
         return MediationAIReflection.model_validate(doc) if doc else None
 
     async def insert_advice(self, advice: MediationAdvice) -> MediationAdvice:
-        result = await self._advices.insert_one(advice.serialize())
-        doc = await self._advices.find_one({"_id": result.inserted_id})
+        doc = await _insert_once_per_job(self._advices, advice.serialize())
         return MediationAdvice.model_validate(doc)
 
     async def get_latest_advice(self, session_id: MongoId) -> MediationAdvice | None:
@@ -295,6 +315,7 @@ class MediationCommentRepository:
         await self._collection.create_index(
             [("session_id", ASCENDING), ("parent_comment_id", ASCENDING), ("created_at", ASCENDING)]
         )
+        await self._collection.create_index([("ai_job_id", ASCENDING)], sparse=True)
 
     async def create_user_comment(
         self,
@@ -340,8 +361,7 @@ class MediationCommentRepository:
             moderation_result_id=moderation_result_id,
             ai_job_id=ai_job_id,
         )
-        result = await self._collection.insert_one(comment.serialize())
-        doc = await self._collection.find_one({"_id": result.inserted_id})
+        doc = await _insert_once_per_job(self._collection, comment.serialize())
         return MediationComment.model_validate(doc)
 
     async def list_for_session(self, session_id: MongoId) -> list[MediationComment]:
@@ -400,7 +420,8 @@ class MediationJobRepository:
                     "status": AIJobStatus.FAILED,
                     "error_message": "Job exceeded retry attempts while processing.",
                     "updated_at": now,
-                }
+                },
+                "$unset": {"lease_token": ""},
             },
         )
         return int(result.modified_count)
@@ -435,6 +456,7 @@ class MediationJobRepository:
                     "status": AIJobStatus.PROCESSING,
                     "started_at": now,
                     "updated_at": now,
+                    "lease_token": uuid4().hex,
                 },
                 "$inc": {"attempts": 1},
             },
@@ -443,36 +465,59 @@ class MediationJobRepository:
         )
         return MediationAIJob.model_validate(doc) if doc else None
 
-    async def mark_completed(self, job_id: MongoId) -> MediationAIJob | None:
+    @staticmethod
+    def _owned_by(job: MediationAIJob) -> dict[str, Any]:
+        """Match the job only while ``job``'s claim is still the current one.
+
+        A worker whose lease went stale was superseded by a newer claim with a new token, so its
+        writes match nothing. Callers reject jobs without a token before calling this.
+        """
+        return {
+            "_id": _oid(job.id),
+            "status": AIJobStatus.PROCESSING,
+            "lease_token": job.lease_token,
+        }
+
+    async def is_owner(self, job: MediationAIJob) -> bool:
+        if not job.id or not job.lease_token:
+            return False
+        return await self._collection.count_documents(self._owned_by(job), limit=1) == 1
+
+    async def mark_completed(self, job: MediationAIJob) -> MediationAIJob | None:
+        """Complete the job if ``job`` still owns it; return None for a superseded worker."""
+        if not job.id or not job.lease_token:
+            return None
         now = utc_now()
         doc = await self._collection.find_one_and_update(
-            {"_id": _oid(job_id)},
-            {"$set": {"status": AIJobStatus.COMPLETED, "completed_at": now, "updated_at": now}},
+            self._owned_by(job),
+            {
+                "$set": {"status": AIJobStatus.COMPLETED, "completed_at": now, "updated_at": now},
+                "$unset": {"lease_token": ""},
+            },
             return_document=ReturnDocument.AFTER,
         )
         return MediationAIJob.model_validate(doc) if doc else None
 
     async def mark_failed_or_retry(
-        self, job_id: MongoId, error_message: str
+        self, job: MediationAIJob, error_message: str
     ) -> MediationAIJob | None:
-        current = await self._collection.find_one({"_id": _oid(job_id)})
-        if not current:
+        """Retry or fail the job if ``job`` still owns it; return None for a superseded worker."""
+        if not job.id or not job.lease_token:
             return None
-        status = (
-            AIJobStatus.FAILED
-            if int(current.get("attempts", 0)) >= int(current.get("max_attempts", 3))
-            else AIJobStatus.PENDING
-        )
         now = utc_now()
+        exhausted = {"$gte": ["$attempts", {"$ifNull": ["$max_attempts", 3]}]}
         doc = await self._collection.find_one_and_update(
-            {"_id": _oid(job_id)},
-            {
-                "$set": {
-                    "status": status,
-                    "error_message": error_message[:2000],
-                    "updated_at": now,
-                }
-            },
+            self._owned_by(job),
+            [
+                {
+                    "$set": {
+                        "status": {"$cond": [exhausted, AIJobStatus.FAILED, AIJobStatus.PENDING]},
+                        "error_message": error_message[:2000],
+                        "updated_at": now,
+                    }
+                },
+                {"$unset": "lease_token"},
+            ],
             return_document=ReturnDocument.AFTER,
         )
         return MediationAIJob.model_validate(doc) if doc else None

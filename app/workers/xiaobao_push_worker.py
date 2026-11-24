@@ -1,5 +1,6 @@
 from app.core import logging
 from app.core.config import get_settings
+from app.core.logging import error_fields
 from app.models.mongo import AsyncDB
 from app.repositories.xiaobao import XiaoBaoConversationRepository, XiaoBaoMessageRepository
 from app.repositories.xiaobao_push import (
@@ -28,9 +29,9 @@ async def process_one_xiaobao_push_work_item(
         await deliveries.fail_exhausted_stale()
         item = await deliveries.claim_next(lease_seconds=settings.xiaobao_web_push_lease_seconds)
     except Exception as exc:
-        logger.exception(
+        logger.error(
             "Xiao Bao push dispatch iteration failed",
-            extra={"error_type": type(exc).__name__},
+            extra={"event": "job_item_failed", "job_kind": "push", **error_fields(exc)},
         )
         return False
     if not item:
@@ -38,11 +39,13 @@ async def process_one_xiaobao_push_work_item(
     try:
         await delivery.process(item)
     except Exception as exc:
-        logger.exception(
+        logger.error(
             "Xiao Bao push delivery failed",
             extra={
+                "event": "job_item_failed",
+                "job_kind": "push",
                 "delivery_id": str(item.id) if item.id else None,
-                "error_type": type(exc).__name__,
+                **error_fields(exc),
             },
         )
         await deliveries.mark_terminal(item, "unknown")

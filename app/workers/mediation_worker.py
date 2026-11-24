@@ -1,5 +1,6 @@
 from app.core import logging
 from app.core.config import get_settings
+from app.core.logging import error_fields
 from app.integrations.openai_client import OpenAIClient
 from app.models.mongo import AsyncDB
 from app.repositories.mediation import (
@@ -10,7 +11,7 @@ from app.repositories.mediation import (
     MediationPerspectiveRepository,
     MediationSessionRepository,
 )
-from app.services.mediation_ai import MediationAIService
+from app.services.mediation_ai import MediationAIService, MediationJobSupersededError
 from app.services.mediation_safety import MediationSafetyService
 
 settings = get_settings()
@@ -36,7 +37,11 @@ def build_mediation_job_services(db: AsyncDB) -> tuple[MediationJobRepository, M
 async def process_one_mediation_job(
     jobs: MediationJobRepository, service: MediationAIService
 ) -> bool:
-    """Claim and process at most one mediation AI job; failures are retried by the queue."""
+    """Claim and process at most one mediation AI job; failures are retried by the queue.
+
+    Every state change is fenced by the claim's lease token, so a worker whose lease went stale
+    can neither persist outputs (checked before each write phase) nor change the job's state.
+    """
     stale_after = settings.mediation_job_processing_timeout_seconds
     await jobs.fail_exhausted_stale_processing_jobs(stale_after)
     job = await jobs.claim_next_pending_job(stale_after)
@@ -44,10 +49,24 @@ async def process_one_mediation_job(
         return False
     try:
         await service.process_job(job)
-        if job.id:
-            await jobs.mark_completed(str(job.id))
+    except MediationJobSupersededError:
+        logger.warning(
+            "Mediation AI job was claimed by another worker",
+            extra={"event": "job_superseded", "job_kind": "mediation"},
+        )
+        return True
     except Exception as exc:
-        logger.exception("Mediation AI job failed", extra={"error_type": type(exc).__name__})
-        if job.id:
-            await jobs.mark_failed_or_retry(str(job.id), str(exc))
+        fields = error_fields(exc)
+        logger.error(
+            "Mediation AI job failed",
+            extra={"event": "job_item_failed", "job_kind": "mediation", **fields},
+        )
+        # Store the error type only; messages may contain provider response bodies.
+        await jobs.mark_failed_or_retry(job, fields["error_type"])
+        return True
+    if await jobs.mark_completed(job) is None:
+        logger.warning(
+            "Mediation AI job was claimed by another worker before completion",
+            extra={"event": "job_superseded", "job_kind": "mediation"},
+        )
     return True

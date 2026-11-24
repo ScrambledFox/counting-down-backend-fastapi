@@ -119,7 +119,8 @@ def test_lambda_handler_reuses_one_event_loop_and_serves_every_queue(
     first = lambda_jobs.handler({"kinds": ["mediation"]}, FakeContext(60_000))
     second = lambda_jobs.handler({}, FakeContext(60_000))
 
-    assert first == second == {"processed": {}, "timed_out": {}, "failed": {}}
+    for result in (first, second):
+        assert result["processed_total"] == result["failed_total"] == result["timed_out_total"] == 0
     assert len(loops) >= 2
     assert all(loop is loops[0] for loop in loops) and not loops[0].is_closed()
     # Handlers are built once per execution environment, for every queue.
@@ -214,42 +215,96 @@ def test_build_job_handlers_is_ordered_and_deduplicated(monkeypatch: pytest.Monk
 # --- Infrastructure settings ---------------------------------------------------------------
 
 
-def test_aws_session_prefers_explicit_heroku_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def _aws_settings(**overrides: object) -> Settings:
+    # Never read the developer's .env: these tests must not see real credentials.
+    base: dict[str, object] = {"aws_region": "eu-west-1"}
+    return Settings(_env_file=None, **{**base, **overrides})  # type: ignore[call-arg]
+
+
+@pytest.fixture
+def fresh_aws_sessions() -> Any:
+    aws._session.cache_clear()
+    yield
+    aws._session.cache_clear()
+
+
+def test_s3_session_uses_heroku_keys_and_bucket_region(
+    monkeypatch: pytest.MonkeyPatch, fresh_aws_sessions: None
+) -> None:
     monkeypatch.setattr(
         aws,
         "get_settings",
-        lambda: SimpleNamespace(
-            aws_access_key="AKIAEXAMPLE", aws_secret_key="example-secret", aws_region="eu-central-1"
+        lambda: _aws_settings(
+            aws_access_key="AKIAEXAMPLE", aws_secret_key="example-secret", aws_s3_region="eu-west-1"
         ),
     )
-    aws.get_aws_session.cache_clear()
-    try:
-        credentials = aws.get_aws_session().get_credentials()
-        assert credentials is not None and credentials.access_key == "AKIAEXAMPLE"
-    finally:
-        aws.get_aws_session.cache_clear()
+
+    session = aws.get_s3_session()
+
+    credentials = session.get_credentials()
+    assert credentials is not None and credentials.access_key == "AKIAEXAMPLE"
+    assert session.region_name == "eu-west-1"
 
 
-def test_aws_session_falls_back_to_default_credential_chain(
-    monkeypatch: pytest.MonkeyPatch,
+def test_lambda_region_does_not_leak_into_s3(
+    monkeypatch: pytest.MonkeyPatch, fresh_aws_sessions: None
+) -> None:
+    # On Lambda, AWS_REGION is the function's region; the bucket region is set explicitly.
+    monkeypatch.setattr(
+        aws,
+        "get_settings",
+        lambda: _aws_settings(aws_region="eu-central-1", aws_s3_region="eu-west-1"),
+    )
+
+    assert aws.get_s3_session().region_name == "eu-west-1"
+    assert aws.get_job_wakeup_session().region_name == "eu-central-1"
+
+
+def test_wakeup_uses_separate_invoke_only_credentials(
+    monkeypatch: pytest.MonkeyPatch, fresh_aws_sessions: None
+) -> None:
+    monkeypatch.setattr(
+        aws,
+        "get_settings",
+        lambda: _aws_settings(
+            aws_access_key="AKIAS3ONLY",
+            aws_secret_key="s3-secret",
+            job_wakeup_aws_access_key="AKIAINVOKEONLY",
+            job_wakeup_aws_secret_key="invoke-secret",
+            job_wakeup_lambda_region="eu-central-1",
+        ),
+    )
+
+    wakeup = aws.get_job_wakeup_session()
+    s3 = aws.get_s3_session()
+
+    assert wakeup.get_credentials().access_key == "AKIAINVOKEONLY"  # type: ignore[union-attr]
+    assert wakeup.region_name == "eu-central-1"
+    assert s3.get_credentials().access_key == "AKIAS3ONLY"  # type: ignore[union-attr]
+
+
+def test_sessions_fall_back_to_default_credential_chain(
+    monkeypatch: pytest.MonkeyPatch, fresh_aws_sessions: None
 ) -> None:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIAFROMCHAIN")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "chain-secret")
-    monkeypatch.setattr(
-        aws,
-        "get_settings",
-        lambda: SimpleNamespace(
-            aws_access_key=None, aws_secret_key=None, aws_region="eu-central-1"
-        ),
-    )
-    aws.get_aws_session.cache_clear()
-    try:
-        session = aws.get_aws_session()
+    monkeypatch.setattr(aws, "get_settings", lambda: _aws_settings())
+
+    for session in (aws.get_s3_session(), aws.get_job_wakeup_session()):
         credentials = session.get_credentials()
         assert credentials is not None and credentials.access_key == "AKIAFROMCHAIN"
-        assert session.region_name == "eu-central-1"
-    finally:
-        aws.get_aws_session.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"aws_access_key": "AKIAEXAMPLE"},
+        {"job_wakeup_aws_secret_key": "only-the-secret"},
+    ],
+)
+def test_half_configured_key_pairs_are_rejected(fields: dict[str, str]) -> None:
+    with pytest.raises(ValidationError, match="must be set together"):
+        Settings(_env_file=None, **fields)  # type: ignore[call-arg]
 
 
 def test_mongo_pool_size_is_configurable() -> None:

@@ -129,24 +129,53 @@ async def test_clock_materializes_runs_before_slow_lane_looks_for_them() -> None
 
 
 @pytest.mark.asyncio
-async def test_slow_queues_take_turns() -> None:
-    order: list[str] = []
+async def test_routine_starts_while_mediation_and_image_work_is_underway() -> None:
+    started: dict[str, float] = {}
+    finished: dict[str, float] = {}
 
-    def record(item: str) -> Awaitable[None]:
-        order.append(item)
-        return asyncio.sleep(0)
+    def timed(seconds: float) -> Callable[[str], Awaitable[None]]:
+        async def work(item: str) -> None:
+            started[item] = time.monotonic()
+            await asyncio.sleep(seconds)
+            finished[item] = time.monotonic()
 
-    mediation = FakeQueue(["m1", "m2"])
-    image = FakeQueue(["i1", "i2"])
+        return work
+
+    mediation = FakeQueue(["mediation-job"])
+    image = FakeQueue(["image-job"])
+    routine = FakeQueue(["routine-run"])
     await run_jobs(
         [
-            mediation.handler(JobKind.MEDIATION, work=record),
-            image.handler(JobKind.IMAGE, work=record),
+            mediation.handler(JobKind.MEDIATION, work=timed(0.4)),
+            image.handler(JobKind.IMAGE, work=timed(0.4)),
+            routine.handler(JobKind.ROUTINE, work=timed(0.01)),
         ],
         deadline=soon(),
     )
 
-    assert order == ["m1", "i1", "m2", "i2"]
+    # Each slow queue has its own lane: the routine neither waits for mediation nor for images.
+    assert started["routine-run"] < finished["mediation-job"]
+    assert started["routine-run"] < finished["image-job"]
+    assert finished["routine-run"] < finished["mediation-job"]
+
+
+@pytest.mark.asyncio
+async def test_failing_queue_does_not_stop_healthy_queues() -> None:
+    async def broken() -> bool:
+        raise RuntimeError("image storage unavailable")
+
+    mediation = FakeQueue(["m1", "m2", "m3"])
+    summary = await run_jobs(
+        [
+            JobHandler(JobKind.IMAGE, broken, timeout_seconds=1, idle_interval_seconds=0.05),
+            mediation.handler(JobKind.MEDIATION),
+        ],
+        deadline=soon(),
+    )
+
+    assert mediation.done == ["m1", "m2", "m3"]
+    assert summary.failed == {"image": 1}
+    assert summary.processed == {"mediation": 3}
 
 
 @pytest.mark.asyncio
@@ -244,3 +273,43 @@ async def test_empty_handler_list_returns_immediately() -> None:
     summary = await asyncio.wait_for(run_jobs([], deadline=soon()), 1)
 
     assert summary.processed == {}
+
+
+@pytest.mark.asyncio
+async def test_queue_that_cannot_initialize_retries_without_blocking_others() -> None:
+    from app.workers.job_handlers import _lazy_queue
+
+    builds = 0
+
+    def build_mediation() -> object:
+        nonlocal builds
+        builds += 1
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+
+    async def never_called(_services: object) -> bool:
+        raise AssertionError("unreachable")
+
+    broken = _lazy_queue(
+        JobKind.MEDIATION,
+        build_mediation,
+        never_called,
+        timeout_seconds=1,
+        idle_interval_seconds=0.05,
+    )
+    image = FakeQueue()
+    stop = asyncio.Event()
+    runner = asyncio.create_task(
+        run_jobs(
+            [broken, image.handler(JobKind.IMAGE, idle=0.02)], continuous=True, stop_event=stop
+        )
+    )
+    await asyncio.sleep(0.05)
+    image.items.append("photo-1")
+    await asyncio.sleep(0.2)
+    stop.set()
+    summary = await asyncio.wait_for(runner, 1)
+
+    assert image.done == ["photo-1"]
+    # The broken queue is retried after its idle interval instead of being disabled for good.
+    assert builds >= 2
+    assert summary.failed["mediation"] == builds

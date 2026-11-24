@@ -11,7 +11,7 @@ import json
 from functools import lru_cache
 from typing import Protocol
 
-from app.core.aws import get_aws_session
+from app.core.aws import get_job_wakeup_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.workers.job_runner import JobKind
@@ -43,7 +43,7 @@ class LambdaJobWakeup:
 
     def _lambda_client(self) -> object:
         if self._client is None:
-            self._client = get_aws_session().client("lambda")
+            self._client = get_job_wakeup_session().client("lambda")
         return self._client
 
     async def wake(self, *kinds: JobKind) -> None:

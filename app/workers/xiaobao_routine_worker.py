@@ -2,6 +2,7 @@ from typing import Any, cast
 
 from app.core import logging
 from app.core.config import get_settings
+from app.core.logging import error_fields
 from app.integrations.openai_client import OpenAIClient
 from app.models.mongo import AsyncDB
 from app.repositories.relationship_care import (
@@ -115,9 +116,14 @@ async def process_one_xiaobao_routine_work_item(
             await service.repair_committed_delivery(repair)
             return True
         except Exception as exc:
-            logger.exception(
+            logger.error(
                 "Xiao Bao committed routine delivery repair failed",
-                extra={"routine_id": repair.routine_id, "error_type": type(exc).__name__},
+                extra={
+                    "event": "job_item_failed",
+                    "job_kind": "routine",
+                    "routine_id": repair.routine_id,
+                    **error_fields(exc),
+                },
             )
             await runs.mark_failed_or_retry(repair, type(exc).__name__)
             # Keep this routine's durable barrier and continue with unrelated work. Its failed
@@ -138,9 +144,14 @@ async def process_one_xiaobao_routine_work_item(
     try:
         await service.process(run)
     except Exception as exc:
-        logger.exception(
+        logger.error(
             "Xiao Bao routine execution failed",
-            extra={"routine_id": run.routine_id, "error_type": type(exc).__name__},
+            extra={
+                "event": "job_item_failed",
+                "job_kind": "routine",
+                "routine_id": run.routine_id,
+                **error_fields(exc),
+            },
         )
         failed = await runs.mark_failed_or_retry(run, type(exc).__name__)
         await _finish_terminal_reminder_failure(routines, failed)

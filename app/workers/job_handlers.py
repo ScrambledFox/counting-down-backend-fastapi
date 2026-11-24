@@ -1,6 +1,6 @@
 """Bind each durable queue's existing single-item function to the job runner."""
 
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 
 from app.core.config import get_settings
 from app.models.mongo import AsyncDB
@@ -32,71 +32,84 @@ def within_lease(lease_seconds: float) -> float:
     return lease_seconds - min(60.0, lease_seconds / 4)
 
 
-def _clock_handler(db: AsyncDB) -> JobHandler:
-    repositories = build_routine_clock_repositories(db)
+def _lazy_queue[Services](
+    kind: JobKind,
+    build: Callable[[], Services],
+    process: Callable[[Services], Awaitable[bool]],
+    *,
+    timeout_seconds: float,
+    idle_interval_seconds: float,
+) -> JobHandler:
+    """Build a queue's dependencies on first use, independently of every other queue.
+
+    A queue whose dependencies cannot be built (for example a missing API key) fails only its own
+    turns: the runner records the failure, backs off for the idle interval and tries again, while
+    healthy queues keep running.
+    """
+    services: Services | None = None
 
     async def process_one() -> bool:
-        return await process_xiaobao_routine_clock_iteration(*repositories) > 0
+        nonlocal services
+        if services is None:
+            services = build()
+        return await process(services)
 
     return JobHandler(
-        kind=JobKind.CLOCK,
+        kind=kind,
         process_one=process_one,
+        timeout_seconds=timeout_seconds,
+        idle_interval_seconds=idle_interval_seconds,
+    )
+
+
+def _clock_handler(db: AsyncDB) -> JobHandler:
+    async def process(repositories: tuple) -> bool:
+        return await process_xiaobao_routine_clock_iteration(*repositories) > 0
+
+    return _lazy_queue(
+        JobKind.CLOCK,
+        lambda: build_routine_clock_repositories(db),
+        process,
         timeout_seconds=CLOCK_TIMEOUT_SECONDS,
         idle_interval_seconds=settings.xiaobao_routine_clock_poll_interval_seconds,
     )
 
 
 def _push_handler(db: AsyncDB) -> JobHandler:
-    services = build_push_services(db)
-
-    async def process_one() -> bool:
-        return await process_one_xiaobao_push_work_item(*services)
-
-    return JobHandler(
-        kind=JobKind.PUSH,
-        process_one=process_one,
+    return _lazy_queue(
+        JobKind.PUSH,
+        lambda: build_push_services(db),
+        lambda services: process_one_xiaobao_push_work_item(*services),
         timeout_seconds=within_lease(settings.xiaobao_web_push_lease_seconds),
         idle_interval_seconds=settings.xiaobao_web_push_worker_poll_interval_seconds,
     )
 
 
 def _routine_handler(db: AsyncDB) -> JobHandler:
-    services = build_routine_execution_service(db)
-
-    async def process_one() -> bool:
-        return await process_one_xiaobao_routine_work_item(*services)
-
-    return JobHandler(
-        kind=JobKind.ROUTINE,
-        process_one=process_one,
+    return _lazy_queue(
+        JobKind.ROUTINE,
+        lambda: build_routine_execution_service(db),
+        lambda services: process_one_xiaobao_routine_work_item(*services),
         timeout_seconds=within_lease(settings.xiaobao_routine_lease_seconds),
         idle_interval_seconds=settings.xiaobao_routine_worker_poll_interval_seconds,
     )
 
 
 def _mediation_handler(db: AsyncDB) -> JobHandler:
-    services = build_mediation_job_services(db)
-
-    async def process_one() -> bool:
-        return await process_one_mediation_job(*services)
-
-    return JobHandler(
-        kind=JobKind.MEDIATION,
-        process_one=process_one,
+    return _lazy_queue(
+        JobKind.MEDIATION,
+        lambda: build_mediation_job_services(db),
+        lambda services: process_one_mediation_job(*services),
         timeout_seconds=within_lease(settings.mediation_job_processing_timeout_seconds),
         idle_interval_seconds=settings.mediation_worker_poll_interval_seconds,
     )
 
 
 def _image_handler(db: AsyncDB) -> JobHandler:
-    services = build_image_job_services(db)
-
-    async def process_one() -> bool:
-        return await process_one_image_job(*services)
-
-    return JobHandler(
-        kind=JobKind.IMAGE,
-        process_one=process_one,
+    return _lazy_queue(
+        JobKind.IMAGE,
+        lambda: build_image_job_services(db),
+        lambda services: process_one_image_job(*services),
         timeout_seconds=within_lease(IMAGE_JOB_LEASE_SECONDS),
         idle_interval_seconds=settings.image_worker_poll_seconds,
     )

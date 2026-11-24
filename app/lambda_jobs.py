@@ -15,15 +15,20 @@ import asyncio
 import time
 from typing import Any
 
-from app.core.logging import get_logger, setup_logging
+from app.core.logging import setup_logging
 from app.db.mongo_client import get_db
 from app.workers.job_handlers import build_job_handlers
-from app.workers.job_runner import JobHandler, JobKind, run_jobs
+from app.workers.job_runner import (
+    JobHandler,
+    JobKind,
+    JobRunSummary,
+    log_job_run_summary,
+    run_jobs,
+)
 
 # Leave time to log and return after the runner's own deadline margin.
 LAMBDA_SAFETY_MARGIN_SECONDS = 10.0
 
-logger = get_logger(__name__)
 _loop = asyncio.new_event_loop()
 _handlers: list[JobHandler] | None = None
 
@@ -37,22 +42,23 @@ def requested_kinds(event: Any) -> list[str]:
     return sorted({item for item in raw if isinstance(item, str) and item in known})
 
 
-async def _run(remaining_seconds: float) -> dict[str, dict[str, int]]:
+async def _run(remaining_seconds: float) -> JobRunSummary:
     global _handlers
     if _handlers is None:
         _handlers = build_job_handlers(get_db(), JobKind)
     deadline = time.monotonic() + remaining_seconds - LAMBDA_SAFETY_MARGIN_SECONDS
-    summary = await run_jobs(_handlers, deadline=deadline)
-    return summary.as_log_fields()
+    return await run_jobs(_handlers, deadline=deadline)
 
 
-def handler(event: Any, context: Any) -> dict[str, dict[str, int]]:
+def handler(event: Any, context: Any) -> dict[str, object]:
+    """Run once and return the counts.
+
+    The invocation succeeds even when individual items failed or timed out: those items are
+    retried through their queues, and monitoring alarms on the ``job_run_summary`` log event.
+    """
     setup_logging()
     asyncio.set_event_loop(_loop)
     remaining_seconds = context.get_remaining_time_in_millis() / 1000
-    result = _loop.run_until_complete(_run(remaining_seconds))
-    logger.info(
-        "Background job invocation finished",
-        extra={"requested_kinds": requested_kinds(event), **result},
-    )
-    return result
+    summary = _loop.run_until_complete(_run(remaining_seconds))
+    log_job_run_summary(summary, requested_kinds=requested_kinds(event))
+    return summary.as_log_fields()

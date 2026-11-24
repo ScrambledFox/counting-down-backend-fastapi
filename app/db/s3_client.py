@@ -10,7 +10,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.aws import get_aws_session
+from app.core.aws import get_s3_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.s3 import S3Storage
@@ -183,9 +183,9 @@ class Boto3S3Storage(S3Storage):
 
 @lru_cache
 def _get_s3_client() -> S3Client:
-    session = get_aws_session()
+    session = get_s3_session()
     cfg = Config(
-        region_name=settings.aws_region,
+        region_name=settings.s3_region,
         retries={"max_attempts": 5, "mode": "standard"},
         connect_timeout=5,
         read_timeout=60,

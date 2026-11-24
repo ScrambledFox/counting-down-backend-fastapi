@@ -620,3 +620,36 @@ async def test_unarchive_removes_only_current_user_pending_mark() -> None:
     args = repos["sessions"].unmark_archived.await_args.args
     assert args[0] == SESSION_ID
     assert set(args[1]) == {UserType.JORIS}
+
+
+@pytest.mark.asyncio
+async def test_superseded_worker_writes_nothing_after_its_external_call() -> None:
+    from app.services.mediation_ai import MediationJobSupersededError
+
+    service, repos = make_ai_service()
+    perspective = make_perspective(PerspectiveStatus.SUBMITTED_PENDING_REVIEW)
+    repos["perspectives"].get_by_id.return_value = perspective
+    repos["safety"].moderate_perspective.return_value = AsyncMock(
+        should_block_normal_mediation=False
+    )
+    # The lease went stale during the moderation call and another worker claimed the job.
+    repos["jobs"].is_owner.return_value = False
+    job = MediationAIJob(
+        id="64b64c000000000000000301",
+        job_type=MediationAIJobType.PERSPECTIVE_MODERATION,
+        status=AIJobStatus.PROCESSING,
+        session_id="64b64c000000000000000302",
+        source_entity_id=str(perspective.id),
+        idempotency_key="perspective_moderation:test",
+        lease_token="stale-token",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    with pytest.raises(MediationJobSupersededError):
+        await service.process_job(job)
+
+    repos["moderation"].insert.assert_not_called()
+    repos["perspectives"].lock_perspective.assert_not_called()
+    repos["perspectives"].mark_flagged.assert_not_called()
+    repos["sessions"].set_status.assert_not_called()

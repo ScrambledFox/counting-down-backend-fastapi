@@ -155,10 +155,37 @@ python -m app.workers.drain --loop     # keep polling (local development, Heroku
 python -m app.workers.drain --kinds push,clock --max-seconds 120
 ```
 
-The clock and push queues run in their own lane, so a long AI generation never delays
-notifications or due routines. Delivery is at-least-once: a crash after a push is sent but before
-it is recorded can repeat it, and the service worker collapses repeats through the notification
-tag.
+Every queue runs in its own lane, concurrently, one item at a time per queue: the clock and push
+share a fast lane, and routine runs, mediation and image processing each have their own. A slow
+or failing queue never blocks another one, and a queue whose dependencies cannot be built (for
+example a missing API key) fails only its own turns and is retried after its idle interval.
+
+Mediation jobs are fenced by a claim token: only the current owner can complete, fail or retry a
+job, ownership is re-checked after each slow external call before anything is persisted, and AI
+outputs (reflections, advice, AI comments) are written at most once per job.
+
+Push delivery is at-least-once: a crash after a push is sent but before it is recorded can repeat
+it, and the service worker collapses repeats through the notification tag.
+
+### Routine latency
+
+A routine passes through four steps, each with its own bound:
+
+| Step | What happens | Typical delay |
+|---|---|---|
+| Materialize | The clock turns a due routine into a run | Next clock tick: within 15 s in `--loop` mode; within ~1 minute when a scheduler invokes the runner |
+| Start | The routine lane claims the run | Immediately after the clock pass; never waits for mediation or image work |
+| Persist | The run generates and commits the inbox message | AI generation time, capped at 240 s per attempt (300 s lease) |
+| Deliver | Push delivery sends the notification | Seconds: the fast lane polls every 1–2 s while other lanes work |
+
+### Logs
+
+Structured fields (job kind, counts, durations, error types and code locations, opaque IDs) are
+rendered from an allowlist, as `key=value` text or, with `LOG_FORMAT=json`, one JSON object per
+line. Job logs never include exception messages, prompts, generated content or provider
+responses. Each run ends with a `job_run_summary` event carrying `processed_total`,
+`failed_total`, `timed_out_total` and `duration_ms`. The run itself succeeds even when items fail,
+so alert on those fields.
 
 The web process can also work on queues itself, controlled by `IMAGE_WORKER_ENABLED` (default on),
 `MEDIATION_WORKER_ENABLED` and `XIAOBAO_IN_PROCESS_JOBS_ENABLED` (clock, routines and push). When

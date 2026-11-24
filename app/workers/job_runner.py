@@ -1,16 +1,17 @@
 """Consolidated background job runner.
 
 Every queue in this application is a durable MongoDB collection with leases, attempt limits and
-duplicate guards. The runner therefore only decides *when* to call each queue's existing
-"process one item" function; it never holds job state itself. Stopping it at any point is
-equivalent to a crash that the queues already recover from when their leases expire.
+duplicate guards. The runner only decides *when* to call each queue's existing "process one
+item" function; it holds no job state itself. Stopping it at any point is equivalent to a crash
+that the queues already recover from when their leases expire.
 
-Work is split into two lanes that run concurrently:
+Each queue runs in its own lane, concurrently with the others, and processes one item at a time:
 
-* the fast lane (routine clock and push delivery) never waits behind slow work, so a long AI
-  generation cannot delay notifications or the materialization of due routines;
-* the slow lane (routine runs, mediation AI, image processing) handles one item at a time,
-  round-robin across queues so that no queue starves another.
+* the fast lane (routine clock and push delivery) keeps polling while slow work runs, so a long AI
+  generation never delays notifications or the materialization of due routines;
+* routine runs, mediation AI and image processing each have their own lane, so a slow or failing
+  queue never blocks another one (the previous web process also ran image and mediation work in
+  separate tasks).
 
 The same logic runs in two modes. Finite mode drains available work and returns before a deadline
 (serverless invocations, one-off commands). Continuous mode polls until a stop event is set
@@ -18,18 +19,19 @@ The same logic runs in two modes. Finite mode drains available work and returns 
 """
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from app.core.logging import get_logger
+from app.core.logging import error_fields, get_logger
 
 logger = get_logger(__name__)
 
 # Time kept free at the end of a finite run so the process can report before its hard limit.
 DEADLINE_MARGIN_SECONDS = 5.0
-# How often an idle fast lane checks for push work while the slow lane is still producing it.
+# How often an idle fast lane checks for push work while slow lanes are still producing it.
 FAST_LANE_FOLLOW_SECONDS = 1.0
 
 
@@ -51,7 +53,7 @@ class JobHandler:
     ``process_one`` claims and processes at most one item and returns whether it found work.
     ``timeout_seconds`` must stay below the queue's lease so a cancelled item is retried by the
     next runner instead of overlapping with a still-running one. ``idle_interval_seconds`` is the
-    pause before polling an empty queue again.
+    pause before polling an empty (or failing) queue again.
     """
 
     kind: JobKind
@@ -65,12 +67,44 @@ class JobRunSummary:
     processed: dict[str, int] = field(default_factory=dict)
     timed_out: dict[str, int] = field(default_factory=dict)
     failed: dict[str, int] = field(default_factory=dict)
+    duration_ms: int = 0
 
     def count(self, bucket: dict[str, int], kind: JobKind) -> None:
         bucket[kind.value] = bucket.get(kind.value, 0) + 1
 
-    def as_log_fields(self) -> dict[str, dict[str, int]]:
-        return {"processed": self.processed, "timed_out": self.timed_out, "failed": self.failed}
+    @property
+    def unsuccessful(self) -> bool:
+        return bool(self.failed or self.timed_out)
+
+    def as_log_fields(self) -> dict[str, object]:
+        """Counts only; safe to log and to return from a Lambda invocation."""
+        return {
+            "processed": self.processed,
+            "failed": self.failed,
+            "timed_out": self.timed_out,
+            "processed_total": sum(self.processed.values()),
+            "failed_total": sum(self.failed.values()),
+            "timed_out_total": sum(self.timed_out.values()),
+            "duration_ms": self.duration_ms,
+        }
+
+
+def log_job_run_summary(summary: JobRunSummary, **fields: object) -> None:
+    """Emit the ``job_run_summary`` event that monitoring alarms on.
+
+    A run can finish normally while individual items failed or timed out, so alarms key on
+    ``failed_total`` and ``timed_out_total`` rather than on the process outcome.
+    """
+    logger.log(
+        logging.WARNING if summary.unsuccessful else logging.INFO,
+        "Background job run finished",
+        extra={
+            "event": "job_run_summary",
+            "outcome": "unsuccessful_items" if summary.unsuccessful else "ok",
+            **summary.as_log_fields(),
+            **fields,
+        },
+    )
 
 
 class _Lane:
@@ -94,17 +128,31 @@ class _Lane:
         return self._clock() + handler.timeout_seconds + DEADLINE_MARGIN_SECONDS <= self._deadline
 
     async def _run_one(self, handler: JobHandler) -> bool:
+        started = self._clock()
         try:
             worked = await asyncio.wait_for(handler.process_one(), handler.timeout_seconds)
         except TimeoutError:
             # The item's lease outlives this timeout, so another run retries it safely.
-            logger.warning("Background job timed out", extra={"job_kind": handler.kind.value})
+            logger.warning(
+                "Background job timed out",
+                extra={
+                    "event": "job_timeout",
+                    "job_kind": handler.kind.value,
+                    "duration_ms": round((self._clock() - started) * 1000),
+                },
+            )
             self._summary.count(self._summary.timed_out, handler.kind)
             return True
         except Exception as exc:
-            logger.exception(
+            # Never log the exception message: it may hold provider bodies or private content.
+            logger.error(
                 "Background job failed",
-                extra={"job_kind": handler.kind.value, "error_type": type(exc).__name__},
+                extra={
+                    "event": "job_failed",
+                    "job_kind": handler.kind.value,
+                    "duration_ms": round((self._clock() - started) * 1000),
+                    **error_fields(exc),
+                },
             )
             self._summary.count(self._summary.failed, handler.kind)
             return False
@@ -153,15 +201,15 @@ class _Lane:
         )
 
 
-async def _sleep(seconds: float, stop_event: asyncio.Event | None) -> None:
+async def _sleep(seconds: float, wake_event: asyncio.Event | None) -> None:
     if seconds <= 0:
         await asyncio.sleep(0)
         return
-    if stop_event is None:
+    if wake_event is None:
         await asyncio.sleep(seconds)
         return
     try:
-        await asyncio.wait_for(stop_event.wait(), seconds)
+        await asyncio.wait_for(wake_event.wait(), seconds)
     except TimeoutError:
         pass
 
@@ -182,20 +230,18 @@ async def run_jobs(
     """
     if not continuous and deadline is None:
         raise ValueError("finite job runs require a deadline")
+    started = clock()
     summary = JobRunSummary()
-    fast = _Lane(
-        [h for h in handlers if h.kind in FAST_KINDS],
-        deadline=deadline,
-        summary=summary,
-        clock=clock,
-    )
-    slow = _Lane(
-        [h for h in handlers if h.kind not in FAST_KINDS],
-        deadline=deadline,
-        summary=summary,
-        clock=clock,
-    )
+
+    def lane(lane_handlers: Sequence[JobHandler]) -> _Lane:
+        return _Lane(lane_handlers, deadline=deadline, summary=summary, clock=clock)
+
+    fast = lane([h for h in handlers if h.kind in FAST_KINDS])
+    slow_lanes = [lane([h]) for h in handlers if h.kind not in FAST_KINDS]
+    slow_remaining = len(slow_lanes)
     slow_done = asyncio.Event()
+    if not slow_lanes:
+        slow_done.set()
     fast_primed = asyncio.Event()
 
     def stopped() -> bool:
@@ -208,7 +254,7 @@ async def run_jobs(
             final_pass_done = False
             while not stopped():
                 worked = await fast.run_pass()
-                # Due routines are materialized before the slow lane looks for runs.
+                # Due routines are materialized before the routine lane looks for runs.
                 fast_primed.set()
                 if worked:
                     continue
@@ -220,22 +266,21 @@ async def run_jobs(
                 if slow_done.is_set():
                     if final_pass_done:
                         return
-                    # Pick up pushes that the slow lane created after the previous pass.
+                    # Pick up pushes that slow lanes created after the previous pass.
                     fast.make_all_due()
                     final_pass_done = True
                     continue
                 # Keep delivering pushes that slow work produces while it is still running, and
-                # do the final pass as soon as the slow lane finishes.
+                # do the final pass as soon as the last slow lane finishes.
                 await _sleep(
                     min(FAST_LANE_FOLLOW_SECONDS, fast.seconds_until_next_due()), slow_done
                 )
         finally:
             fast_primed.set()
 
-    async def run_slow() -> None:
+    async def run_slow(slow: _Lane) -> None:
+        nonlocal slow_remaining
         try:
-            if slow.empty:
-                return
             if not continuous:
                 await fast_primed.wait()
             while not stopped():
@@ -246,7 +291,10 @@ async def run_jobs(
                     return
                 await _sleep(slow.seconds_until_next_due(), stop_event)
         finally:
-            slow_done.set()
+            slow_remaining -= 1
+            if slow_remaining == 0:
+                slow_done.set()
 
-    await asyncio.gather(run_fast(), run_slow())
+    await asyncio.gather(run_fast(), *(run_slow(slow) for slow in slow_lanes))
+    summary.duration_ms = round((clock() - started) * 1000)
     return summary

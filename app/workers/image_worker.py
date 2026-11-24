@@ -2,7 +2,7 @@ import asyncio
 from functools import partial
 
 from app.core.config import get_settings
-from app.core.logging import get_logger
+from app.core.logging import error_fields, get_logger
 from app.db.s3_client import get_s3_storage
 from app.models.mongo import AsyncDB
 from app.repositories.image import ImageRepository
@@ -57,7 +57,10 @@ async def process_one_image_job(jobs: ImageJobRepository, service: ImageService)
             # Finish or release well before the five-minute lease expires.
             await asyncio.wait_for(process(jobs, service, job), timeout=IMAGE_JOB_TIMEOUT_SECONDS)
         except Exception as exc:
-            logger.exception("Image background job failed: %s", field)
+            logger.error(
+                "Image background job failed",
+                extra={"event": "job_item_failed", "job_kind": "image", **error_fields(exc)},
+            )
             await jobs.fail(collection, field, job, exc)
         return True
     return False

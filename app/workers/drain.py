@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from app.core.logging import get_logger, setup_logging
 from app.db.mongo_client import get_db
 from app.workers.job_handlers import build_job_handlers
-from app.workers.job_runner import JobKind, JobRunSummary, run_jobs
+from app.workers.job_runner import JobKind, JobRunSummary, log_job_run_summary, run_jobs
 
 logger = get_logger(__name__)
 
@@ -52,7 +52,7 @@ async def _main(kinds: list[JobKind], *, continuous: bool, max_seconds: float) -
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, task.cancel)
     summary = await drain(kinds, continuous=continuous, max_seconds=max_seconds)
-    logger.info("Background jobs finished", extra=summary.as_log_fields())
+    log_job_run_summary(summary, job_kinds=[kind.value for kind in kinds])
 
 
 def main(argv: list[str] | None = None) -> None:

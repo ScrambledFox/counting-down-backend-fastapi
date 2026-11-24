@@ -189,6 +189,8 @@ class MediationAIReflection(CustomModel):
     openai_response_id: str | None = None
     created_at: datetime
     moderation_result_id: MongoId | None = None
+    # The job that produced this output; outputs are written at most once per job.
+    ai_job_id: MongoId | None = None
 
 
 class MediationAdvice(CustomModel):
@@ -201,6 +203,7 @@ class MediationAdvice(CustomModel):
     created_at: datetime
     superseded_by_id: MongoId | None = None
     moderation_result_id: MongoId | None = None
+    ai_job_id: MongoId | None = None
 
 
 class MediationComment(CustomModel):
@@ -241,6 +244,8 @@ class MediationAIJob(CustomModel):
     attempts: int = 0
     max_attempts: int = 3
     error_message: str | None = None
+    # Set on claim; only the current owner may complete, fail or retry the job.
+    lease_token: str | None = None
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None = None
