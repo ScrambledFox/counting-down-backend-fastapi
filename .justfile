@@ -3,6 +3,12 @@ set windows-shell := ["C:\\Program Files\\Git\\bin\\sh.exe","-c"]
 dev:
     uv run fastapi dev app/main.py --reload --host 0.0.0.0 --port 8000
 
+clock:
+    uv run python -m app.workers.xiaobao_routine_clock
+
+worker:
+    uv run python -m app.workers.xiaobao_routine_worker
+
 install:
     uv sync
 

@@ -1,6 +1,7 @@
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any, TypedDict
 
@@ -23,6 +24,7 @@ from app.schemas.v1.xiaobao import (
     XiaoBaoTokenUsage,
 )
 from app.services.todo import TodoService
+from app.util.time import utc_now
 from app.xiaobao.prompts import SYSTEM_PROMPT
 from app.xiaobao.tools import XiaoBaoToolContext, execute_xiaobao_tool, xiaobao_tool_definitions
 
@@ -60,6 +62,8 @@ class XiaoBaoRuntimeContext:
     todo_service: TodoService
     openai_client: OpenAIClient
     emit: EmitEvent
+    current_time_utc: datetime = field(default_factory=utc_now)
+    owner_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,8 +97,21 @@ def _initial_provider_items(
                 ),
             }
         )
+    current_time = runtime.current_time_utc
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=UTC)
+    current_time = current_time.astimezone(UTC)
+    owner_timezone = runtime.owner_timezone or "unknown"
     return [
         {"role": "developer", "content": SYSTEM_PROMPT},
+        {
+            "role": "developer",
+            "content": (
+                "SERVER-AUTHORITATIVE TEMPORAL CONTEXT: current UTC time is "
+                f"{current_time.isoformat()}; current user's profile timezone is {owner_timezone}. "
+                "Use this context, rather than client time, to resolve relative calendar dates."
+            ),
+        },
         {
             "role": "developer",
             "content": (

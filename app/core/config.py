@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -42,6 +43,10 @@ class Settings(BaseSettings):
     xiaobao_rate_limits_collection_name: str = "xiaobao_rate_limits"
     xiaobao_checkpoints_collection_name: str = "xiaobao_graph_checkpoints"
     xiaobao_checkpoint_writes_collection_name: str = "xiaobao_graph_checkpoint_writes"
+    xiaobao_routines_collection_name: str = "xiaobao_routines"
+    xiaobao_routine_runs_collection_name: str = "xiaobao_routine_runs"
+    xiaobao_push_subscriptions_collection_name: str = "xiaobao_push_subscriptions"
+    xiaobao_push_deliveries_collection_name: str = "xiaobao_push_deliveries"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
@@ -78,6 +83,24 @@ class Settings(BaseSettings):
     xiaobao_rate_limit_requests: int = 10
     xiaobao_rate_limit_window_seconds: int = 300
     xiaobao_checkpoint_ttl_seconds: int = 7 * 24 * 60 * 60
+    xiaobao_routine_clock_poll_interval_seconds: float = 15.0
+    xiaobao_routine_worker_poll_interval_seconds: float = 2.0
+    xiaobao_routine_lease_seconds: float = 300.0
+    xiaobao_routine_max_attempts: int = 3
+    xiaobao_routine_retry_base_seconds: float = 30.0
+    xiaobao_routine_retry_max_seconds: float = 900.0
+    xiaobao_routine_materialize_batch_size: int = 50
+    xiaobao_web_push_enabled: bool = False
+    xiaobao_web_push_vapid_public_key: str | None = None
+    xiaobao_web_push_vapid_private_key: str | None = None
+    xiaobao_web_push_vapid_subject: str | None = None
+    xiaobao_web_push_subscription_encryption_key: str | None = None
+    xiaobao_web_push_worker_poll_interval_seconds: float = 2.0
+    xiaobao_web_push_lease_seconds: float = 60.0
+    xiaobao_web_push_max_attempts: int = 3
+    xiaobao_web_push_retry_base_seconds: float = 30.0
+    xiaobao_web_push_retry_max_seconds: float = 900.0
+    xiaobao_web_push_ttl_seconds: int = 300
     mediation_worker_enabled: bool = False
     mediation_worker_poll_interval_seconds: float = 2.0
     mediation_job_processing_timeout_seconds: float = 300.0
@@ -100,11 +123,15 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
-    model_config = SettingsConfigDict(env_file=".env", populate_by_name=True, case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local"),
+        populate_by_name=True,
+        case_sensitive=False,
+    )
 
     @field_validator("frontend_urls", mode="before")
     @classmethod
-    def split_frontend_urls(cls, v: str | list[str] | None):  # type: ignore[override]
+    def split_frontend_urls(cls, v: str | list[str] | None) -> list[str] | None:
         """Allow FRONTEND_URLS env var to be provided as a comma-separated string.
 
         Example:
@@ -119,7 +146,7 @@ class Settings(BaseSettings):
 
     @field_validator("thumbnail_sizes", mode="before")
     @classmethod
-    def split_thumbnail_sizes(cls, v: str | list[int] | None):  # type: ignore[override]
+    def split_thumbnail_sizes(cls, v: str | list[int] | None) -> list[int] | None:
         """Allow THUMBNAIL_SIZES env var to be provided as a comma-separated string.
 
         Example:
@@ -150,7 +177,34 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Missing required access key env vars in production: " + ", ".join(missing)
                 )
+            if self.xiaobao_web_push_enabled and not self.xiaobao_web_push_ready:
+                raise ValueError(
+                    "XIAOBAO_WEB_PUSH_ENABLED requires VAPID and subscription encryption settings"
+                )
+            if self.xiaobao_web_push_enabled:
+                assert self.xiaobao_web_push_subscription_encryption_key is not None
+                try:
+                    Fernet(self.xiaobao_web_push_subscription_encryption_key.encode("ascii"))
+                except (UnicodeEncodeError, ValueError) as exc:
+                    raise ValueError(
+                        "XIAOBAO_WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY must be a Fernet key"
+                    ) from exc
+                subject = self.xiaobao_web_push_vapid_subject
+                if not subject or not subject.startswith(("mailto:", "https://")):
+                    raise ValueError("XIAOBAO_WEB_PUSH_VAPID_SUBJECT must be mailto: or HTTPS")
+                if self.xiaobao_web_push_ttl_seconds <= 0:
+                    raise ValueError("XIAOBAO_WEB_PUSH_TTL_SECONDS must be positive")
         return self
+
+    @property
+    def xiaobao_web_push_ready(self) -> bool:
+        return bool(
+            self.xiaobao_web_push_enabled
+            and self.xiaobao_web_push_vapid_public_key
+            and self.xiaobao_web_push_vapid_private_key
+            and self.xiaobao_web_push_vapid_subject
+            and self.xiaobao_web_push_subscription_encryption_key
+        )
 
 
 @lru_cache

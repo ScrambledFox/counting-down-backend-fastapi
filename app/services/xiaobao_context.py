@@ -177,12 +177,16 @@ class RelationshipContextService:
 
         return public_items, private_items
 
-    async def build(self, current_user: UserType) -> AuthorizedXiaoBaoContext:
-        overview = await self._relationship_care.overview(current_user)
-        todos = await self._todos.get_all()
-        mediation_sessions, private_mediation = await self._mediation_context(current_user)
-        relationship_profile = await self._relationship_profile.get_ai_context()
-
+    def _assemble(
+        self,
+        current_user: UserType,
+        *,
+        overview: Any,
+        todos: list[Any],
+        relationship_profile: Any,
+        mediation_sessions: list[XiaoBaoContextItem],
+        private_mediation: dict[str, XiaoBaoPrivateMediationContext],
+    ) -> AuthorizedXiaoBaoContext:
         boundaries = [
             self._item(
                 XiaoBaoContextReferenceType.PERSONAL_BOUNDARY,
@@ -280,4 +284,32 @@ class RelationshipContextService:
                 mediation_sessions=mediation_sessions,
             ),
             private_mediation_by_key=private_mediation,
+        )
+
+    async def build(self, current_user: UserType) -> AuthorizedXiaoBaoContext:
+        overview = await self._relationship_care.overview(current_user)
+        todos = await self._todos.get_all()
+        mediation_sessions, private_mediation = await self._mediation_context(current_user)
+        relationship_profile = await self._relationship_profile.get_ai_context()
+        return self._assemble(
+            current_user,
+            overview=overview,
+            todos=todos,
+            relationship_profile=relationship_profile,
+            mediation_sessions=mediation_sessions,
+            private_mediation=private_mediation,
+        )
+
+    async def build_for_routine(self, current_user: UserType) -> AuthorizedXiaoBaoContext:
+        """Build fresh allowlisted context without querying mediation at all."""
+        overview = await self._relationship_care.overview(current_user)
+        todos = await self._todos.get_all()
+        relationship_profile = await self._relationship_profile.get_ai_context()
+        return self._assemble(
+            current_user,
+            overview=overview,
+            todos=todos,
+            relationship_profile=relationship_profile,
+            mediation_sessions=[],
+            private_mediation={},
         )
