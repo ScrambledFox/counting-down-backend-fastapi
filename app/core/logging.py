@@ -34,6 +34,9 @@ LOG_FIELDS: Final = frozenset(
         "timed_out_total",
         "routine_id",
         "delivery_id",
+        "task",
+        "oldest_overdue_routine_seconds",
+        "oldest_pending_push_seconds",
     }
 )
 _APP_ROOT = Path(__file__).resolve().parents[1]

@@ -20,3 +20,11 @@ htmlcov/
 .env
 .env.*
 !.env.example
+
+# OpenTofu local files (state lives in S3; tfvars and backend config stay local)
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/terraform.tfvars
+infra/**/backend.hcl
+infra/**/.terraform.lock.hcl.bak

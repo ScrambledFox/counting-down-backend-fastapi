@@ -121,7 +121,8 @@ async def process_one_xiaobao_routine_work_item(
             continue
         try:
             await service.repair_committed_delivery(repair)
-            return JobResult.PROCESSED
+            # An earlier repair in this call may have failed; report it rather than hide it.
+            return JobResult.FAILED if repair_failed else JobResult.PROCESSED
         except Exception as exc:
             logger.error(
                 "Xiao Bao committed routine delivery repair failed",

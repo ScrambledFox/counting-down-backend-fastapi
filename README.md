@@ -199,6 +199,12 @@ anything it misses.
 the same dependency and source layers: `api` (uvicorn behind the Lambda Web Adapter, streaming) and
 `jobs` (the Lambda handler). See `docs/adr/0001-serverless-background-jobs.md`.
 
+## AWS background jobs (Phase 2)
+
+`infra/` contains the OpenTofu configuration for the jobs Lambda, and
+`.github/workflows/deploy-jobs.yml` deploys its image. Provisioning, configuration values, cutover,
+validation and rollback are in `docs/phase2-runbook.md`.
+
 ## Database indexes
 
 Indexes are idempotent. They are created at web startup unless `ENSURE_INDEXES_ON_STARTUP=false`,
@@ -206,6 +212,15 @@ in which case run them once per deploy:
 
 ```bash
 python scripts/ensure_indexes.py
+```
+
+Per-job uniqueness of mediation outputs is enforced by an explicit, one-off migration that never
+runs at startup and never deletes data. It reports duplicates first, then applies only when
+there are none:
+
+```bash
+python scripts/migrate_mediation_output_unique_index.py
+python scripts/migrate_mediation_output_unique_index.py --apply --confirm-database <MONGO_APP_NAME>
 ```
 
 ## Seeding airports
