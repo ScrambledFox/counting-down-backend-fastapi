@@ -89,10 +89,12 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = ["${aws_lambda_function.jobs.arn}:*"]
   }
 
+  # Lambda authorizes alias reads and updates against the function ARN, not the alias ARN.
+  # The function has a single alias (live), so this still covers only that alias.
   statement {
     sid       = "MoveLiveAlias"
     actions   = ["lambda:GetAlias", "lambda:UpdateAlias"]
-    resources = [aws_lambda_alias.live.arn]
+    resources = [aws_lambda_function.jobs.arn, aws_lambda_alias.live.arn]
   }
 }
 
