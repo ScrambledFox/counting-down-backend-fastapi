@@ -1298,3 +1298,34 @@ async def test_message_stays_hidden_when_pause_wins_after_delivery_reservation()
     messages.delete_staged_routine_output.assert_awaited_once()
     messages.finalize_staged_routine_output.assert_not_awaited()
     runs.cancel_claim.assert_awaited_once_with(run, "routine_changed")
+
+
+@pytest.mark.asyncio
+async def test_failed_repair_followed_by_successful_repair_reports_failed() -> None:
+    first = SimpleNamespace(routine_id=OID_1, committed_delivery_pending_run_id="run-1")
+    second = SimpleNamespace(routine_id=OID_1, committed_delivery_pending_run_id="run-2")
+    repairs = {
+        "run-1": SimpleNamespace(routine_id=OID_1),
+        "run-2": SimpleNamespace(routine_id=OID_1),
+    }
+    service = SimpleNamespace(
+        repair_committed_delivery=AsyncMock(side_effect=[RuntimeError("synthetic"), None]),
+        process=AsyncMock(),
+    )
+    routines = SimpleNamespace(
+        list_committed_delivery_repairs=AsyncMock(return_value=[first, second]),
+        list_committed_delivery_guarded_routine_ids=AsyncMock(return_value=[OID_1]),
+    )
+    runs = SimpleNamespace(
+        claim_delivery_repair=AsyncMock(side_effect=lambda run_id, **_: repairs[run_id]),
+        mark_failed_or_retry=AsyncMock(),
+        fail_exhausted_stale=AsyncMock(),
+        list_terminal_failures=AsyncMock(return_value=[]),
+        claim_next=AsyncMock(),
+    )
+
+    result = await process_one_xiaobao_routine_work_item(service, routines, runs)
+
+    assert result == JobResult.FAILED
+    assert service.repair_committed_delivery.await_count == 2
+    runs.mark_failed_or_retry.assert_awaited_once_with(repairs["run-1"], "RuntimeError")

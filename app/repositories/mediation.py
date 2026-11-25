@@ -41,20 +41,25 @@ async def _insert_once_per_job(collection: Any, document: dict[str, Any]) -> dic
     """Insert an AI output, deduplicated per producing job on a best-effort basis.
 
     A retried or superseded job run that reaches persistence again receives the output already
-    stored for that job instead of creating a duplicate. Without a unique index, two writers in
-    the same instant could still both insert; see ADR 0001. Outputs without a job are plain
-    inserts.
+    stored for that job instead of creating a duplicate. Once the unique-index migration has
+    run, the database guarantees this; before it, two writers in the same instant could both
+    insert (see ADR 0001). Outputs without a job are plain inserts.
     """
     job_id = document.get("ai_job_id")
     if job_id is None:
         result = await collection.insert_one(document)
         return await collection.find_one({"_id": result.inserted_id})
-    return await collection.find_one_and_update(
-        {"ai_job_id": job_id},
-        {"$setOnInsert": document},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
+    try:
+        return await collection.find_one_and_update(
+            {"ai_job_id": job_id},
+            {"$setOnInsert": document},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError:
+        # The unique index (scripts/migrate_mediation_output_unique_index.py) rejected a
+        # concurrent second write for this job; return the output that was stored first.
+        return await collection.find_one({"ai_job_id": job_id})
 
 
 class MediationSessionRepository:

@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars (git-ignored). Contains no secrets: those go to SSM out of band.
+aws_region        = "eu-west-1"
+initial_image_tag = "sha-REPLACE_WITH_FIRST_PUSHED_COMMIT"
+
+s3_bucket_name   = "REPLACE-with-existing-image-bucket"
+s3_bucket_region = "eu-west-1"
+mongo_app_name   = "production"
+
+web_push_vapid_public_key = "REPLACE-with-Heroku-XIAOBAO_WEB_PUSH_VAPID_PUBLIC_KEY"
+web_push_vapid_subject    = "https://www.bibi-zhuzhu.nl"
+
+alarm_email = "REPLACE-with-alert-address"
+
+# Mirror the non-secret Heroku settings the jobs rely on.
+extra_environment = {
+  OPENAI_MODEL_XIAOBAO    = "REPLACE"
+  OPENAI_MODEL_MEDIATION  = "REPLACE"
+  OPENAI_MODEL_MODERATION = "REPLACE"
+  THUMBNAIL_SIZE          = "REPLACE"
+}
+
+# Enable only at cutover (see docs/phase2-runbook.md).
+schedule_enabled = false
+
+# Set false if the account already has the GitHub OIDC provider.
+create_github_oidc_provider = true

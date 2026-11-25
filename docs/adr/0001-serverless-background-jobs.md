@@ -1,7 +1,7 @@
 # ADR 0001: Serverless hosting with finite, event-driven background jobs
 
-- **Status:** Accepted (direction). Phase 1 implemented and revised after two reviews; Phases 2
-  and 3 pending approval.
+- **Status:** Accepted. Phase 1 merged and deployed (Heroku release v59). Phase 2 implemented,
+  not provisioned; awaiting approval. Phase 3 not started.
 - **Dates:** 2026-11-24 (decision, Phase 1), 2026-11-25 (review fixes, final review fixes)
 - **Deciders:** Joris (owner), with Claude Code as implementer
 - **Scope:** `counting-down-fastapi` hosting and background execution; `counting-down` API URL
@@ -224,22 +224,63 @@ Its `outcome` is `unsuccessful_items` (logged at WARNING) whenever `failed_total
   The guard exposed three OpenAI client tests that had silently relied on a developer's real
   key; they now use a synthetic one.
 
+## Phase 2 implementation (2026-11-25, not provisioned)
+
+The operational procedure, configuration values, validation and rollback are in
+[`docs/phase2-runbook.md`](../phase2-runbook.md).
+
+- **Infrastructure** (`infra/`, OpenTofu):
+  - `bootstrap/`: the versioned, TLS-only S3 state bucket.
+  - `jobs/` (S3 backend with native lock files): ECR, the jobs function and `live` alias,
+    bounded async invocation, the schedule (disabled until cutover), least-privilege IAM, SSM
+    placeholders, log retention, metric filters and alarms, the budget and the GitHub OIDC
+    deploy role.
+  - Checks: `tofu fmt` and `tofu validate` pass, and Trivy finds nothing apart from two
+    documented, cost-driven exceptions (SSE-S3 instead of a KMS key for state; an unencrypted
+    SNS topic, which CloudWatch alarms require without a $1/month key).
+- **Deployment** (`.github/workflows/deploy-jobs.yml`): gated by `JOBS_DEPLOY_ENABLED`. It
+  builds an arm64 single-manifest image, publishes a version, runs `ensure_indexes` and `smoke`
+  on that version, and only then moves `live`. Rollback moves the alias back.
+- **Application:**
+  - SSM secrets are loaded at cold start, before settings are read.
+  - Deployment tasks `smoke` and `ensure_indexes` run no jobs.
+  - `job_run_summary` reports the age of the oldest overdue routine and pending push.
+  - With `APP_ENV=prod`, MONGO_URL options that disable TLS or certificate verification are
+    rejected.
+  - `AUTH_ACCESS_KEYS_REQUIRED=false` lets the jobs function run in production without login
+    keys.
+- **Readiness tasks:**
+  - Unique-index migration script: checks duplicates first, never deletes, applies only with
+    `--apply --confirm-database`, never at startup. The write path treats a duplicate-key error
+    as "already stored".
+  - Routine repair outcome fix.
+  - Locked dependency installs in the Heroku deploy workflow.
+- **Monitoring cost choice:**
+  - Two custom metrics: `JobProblems` (failed or timed out) and `OverdueWork`.
+  - Seven alarms, using the built-in Lambda metrics for errors, throttling, dropped events,
+    event age and "not running".
+- **Security trade-off:** the Atlas access list already allows `0.0.0.0/0` (required by Heroku).
+  Lambda uses the same public path, without a NAT gateway or static IP. Mitigations: a dedicated
+  least-privilege database user, TLS with certificate verification enforced in production, and
+  credentials only in SSM. Actual Lambda-to-Atlas connectivity is verified by the deployment
+  smoke test.
+
 ## Amendments and status
 
 | # | Requirement | Status |
 |---|---|---|
-| 1 | Verify Atlas network access; never broaden it without approval | **Open: Phase 2 gate.** Not verifiable from the repository. No Atlas setting is changed. |
+| 1 | Verify Atlas network access; never broaden it without approval | **Verified by the owner:** the list already contains `0.0.0.0/0` and is unchanged; documented as a security trade-off above. |
 | 2 | Rate limiting and AI safeguards before exposing the API through Lambda | **Phase 3 gate.** Xiao Bao chat has a per-user limit. Login brute-force protection, a mediation AI cap and a global AI spend guard are still to come. |
 | 3 | Long jobs must not delay push or routines | **Done:** separate lanes, per-item timeouts. |
-| 4 | Bounded async retries and event expiry | **Phase 2:** `maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300` on the jobs function; the schedule target uses 0 retries and a 120 s event age. |
-| 5 | Monitor async event age, dropped events and overdue jobs | **Phase 2:** alarms on `AsyncEventAge`, `AsyncEventsDropped`, `Errors` and `Throttles`; the `job_run_summary` metric filter; oldest-due push and routine age metrics. |
+| 4 | Bounded async retries and event expiry | **Implemented (not provisioned):** `maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300` on the jobs function; the schedule target uses 0 retries and a 120 s event age. |
+| 5 | Monitor async event age, dropped events and overdue jobs | **Implemented (not provisioned):** alarms on `AsyncEventAge`, `AsyncEventsDropped`, `Errors` and `Throttles`; the `job_run_summary` metric filter; oldest-due push and routine age metrics. |
 | 6 | Test crash recovery, expired leases, concurrent wake-ups, duplicates | **Done:** push, mediation and runner integration tests; existing routine and image tests. |
 | 7 | No exactly-once push claim | **Done:** at-least-once, with best-effort dedupe (unique delivery per message and device, token fencing, service-worker `tag` with `renotify: false`). |
-| 8 | Protect ECR images used by active and rollback versions | **Phase 2:** SHA tags; keep 5 Lambda versions; lifecycle policy expires only untagged images and SHA tags beyond the newest 10. |
+| 8 | Protect ECR images used by active and rollback versions | **Implemented (not provisioned):** SHA tags; keep 5 Lambda versions; lifecycle policy expires only untagged images and SHA tags beyond the newest 10. |
 | 9 | One image vs two build targets | **Resolved:** one Dockerfile, shared dependency and source layers, two thin targets. |
 | 10 | Verify auth, cookies, CORS, SSE, disconnects and S3 before the API move | **Phase 3 gate:** checklist below. |
 | 11 | Free allowances are shared with other projects | **Accepted:** a dedicated AWS account for BIBI is recommended; budgets apply in any case. |
-| 12 | Infrastructure and CI must not compete over versions and aliases | **Phase 2:** Tofu ignores `image_uri` and the alias version; CI owns code updates, publishing and alias moves. |
+| 12 | Infrastructure and CI must not compete over versions and aliases | **Implemented:** Tofu ignores `image_uri` and the alias version; CI owns code updates, publishing and alias moves. |
 
 ## Known risks and deferred work
 

@@ -59,3 +59,26 @@ jobs:
 
       - name: Run tests
         run: uv run --no-sync pytest -p no:cacheprovider --disable-warnings
+
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.10
+
+      - name: Check formatting
+        run: tofu fmt -check -recursive infra
+
+      # No backend and no AWS credentials: validation is purely static.
+      - name: Validate
+        run: |
+          for root in infra/bootstrap infra/jobs; do
+            tofu -chdir="$root" init -backend=false -input=false
+            tofu -chdir="$root" validate
+          done

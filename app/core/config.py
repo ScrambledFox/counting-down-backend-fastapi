@@ -74,6 +74,8 @@ class Settings(BaseSettings):
 
     access_key_danfeng: str | None = None
     access_key_joris: str | None = None
+    # The background-jobs Lambda serves no logins, so it runs in production without login keys.
+    auth_access_keys_required: bool = True
     session_duration: int = 7 * 24 * 60 * 60  # 7 days in seconds
 
     openai_api_key: str | None = None
@@ -191,12 +193,21 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def require_access_keys_in_production(self) -> Settings:
         if self.app_env.lower() == "prod":
+            insecure = (
+                "tlsinsecure=true",
+                "tlsallowinvalidcertificates=true",
+                "tlsallowinvalidhostnames=true",
+                "tls=false",
+                "ssl=false",
+            )
+            if any(option in self.mongo_url.lower() for option in insecure):
+                raise ValueError("MONGO_URL must not disable TLS or certificate verification")
             missing: list[str] = []
             if not self.access_key_danfeng:
                 missing.append("ACCESS_KEY_DANFENG")
             if not self.access_key_joris:
                 missing.append("ACCESS_KEY_JORIS")
-            if missing:
+            if missing and self.auth_access_keys_required:
                 raise ValueError(
                     "Missing required access key env vars in production: " + ", ".join(missing)
                 )
