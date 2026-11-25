@@ -233,11 +233,9 @@ The operational procedure, configuration values, validation and rollback are in
   - `bootstrap/`: the versioned, TLS-only S3 state bucket.
   - `jobs/` (S3 backend with native lock files): ECR, the jobs function and `live` alias,
     bounded async invocation, the schedule (disabled until cutover), least-privilege IAM, SSM
-    placeholders, log retention, metric filters and alarms, the budget and the GitHub OIDC
-    deploy role.
-  - Checks: `tofu fmt` and `tofu validate` pass, and Trivy finds nothing apart from two
-    documented, cost-driven exceptions (SSE-S3 instead of a KMS key for state; an unencrypted
-    SNS topic, which CloudWatch alarms require without a $1/month key).
+    placeholders, log retention, an account-wide budget and the GitHub OIDC deploy role.
+  - Checks: `tofu fmt` and `tofu validate` pass, and Trivy finds nothing apart from one
+    documented, cost-driven exception (SSE-S3 instead of a $1/month KMS key for state).
 - **Deployment** (`.github/workflows/deploy-jobs.yml`): gated by `JOBS_DEPLOY_ENABLED`. It
   builds an arm64 single-manifest image, publishes a version, runs `ensure_indexes` and `smoke`
   on that version, and only then moves `live`. Rollback moves the alias back.
@@ -255,10 +253,9 @@ The operational procedure, configuration values, validation and rollback are in
     as "already stored".
   - Routine repair outcome fix.
   - Locked dependency installs in the Heroku deploy workflow.
-- **Monitoring cost choice:**
-  - Two custom metrics: `JobProblems` (failed or timed out) and `OverdueWork`.
-  - Seven alarms, using the built-in Lambda metrics for errors, throttling, dropped events,
-    event age and "not running".
+- **Monitoring (owner decision, 2026-11-25):** no CloudWatch alarms or custom metrics. The only
+  alerting is the account-wide AWS Budget ($2 forecast, $5 actual). Failures, timeouts and
+  overdue work remain visible in each `job_run_summary` log line for investigation.
 - **Security trade-off:** the Atlas access list already allows `0.0.0.0/0` (required by Heroku).
   Lambda uses the same public path, without a NAT gateway or static IP. Mitigations: a dedicated
   least-privilege database user, TLS with certificate verification enforced in production, and
@@ -273,7 +270,7 @@ The operational procedure, configuration values, validation and rollback are in
 | 2 | Rate limiting and AI safeguards before exposing the API through Lambda | **Phase 3 gate.** Xiao Bao chat has a per-user limit. Login brute-force protection, a mediation AI cap and a global AI spend guard are still to come. |
 | 3 | Long jobs must not delay push or routines | **Done:** separate lanes, per-item timeouts. |
 | 4 | Bounded async retries and event expiry | **Implemented (not provisioned):** `maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300` on the jobs function; the schedule target uses 0 retries and a 120 s event age. |
-| 5 | Monitor async event age, dropped events and overdue jobs | **Implemented (not provisioned):** alarms on `AsyncEventAge`, `AsyncEventsDropped`, `Errors` and `Throttles`; the `job_run_summary` metric filter; oldest-due push and routine age metrics. |
+| 5 | Monitor async event age, dropped events and overdue jobs | **Superseded by owner decision (2026-11-25):** no CloudWatch alarms; budget alerts only. The summary log fields remain. Originally designed as: alarms on `AsyncEventAge`, `AsyncEventsDropped`, `Errors` and `Throttles`; the `job_run_summary` metric filter; oldest-due push and routine age metrics. |
 | 6 | Test crash recovery, expired leases, concurrent wake-ups, duplicates | **Done:** push, mediation and runner integration tests; existing routine and image tests. |
 | 7 | No exactly-once push claim | **Done:** at-least-once, with best-effort dedupe (unique delivery per message and device, token fencing, service-worker `tag` with `renotify: false`). |
 | 8 | Protect ECR images used by active and rollback versions | **Implemented (not provisioned):** SHA tags; keep 5 Lambda versions; lifecycle policy expires only untagged images and SHA tags beyond the newest 10. |

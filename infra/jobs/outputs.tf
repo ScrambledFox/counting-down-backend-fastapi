@@ -28,7 +28,3 @@ output "heroku_wakeup_user" {
 output "ssm_parameter_path" {
   value = local.ssm_parameter_path
 }
-
-output "alerts_topic_arn" {
-  value = aws_sns_topic.alerts.arn
-}

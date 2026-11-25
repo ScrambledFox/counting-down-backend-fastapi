@@ -13,7 +13,8 @@ Heroku web API ──(async invoke, queue names only)──▶ bibi-jobs:live �
                          SSM /bibi/prod/jobs (secrets) ──┤──▶ MongoDB Atlas (TLS, dedicated user)
                                                          ├──▶ S3 (read images/, thumbnails/; write thumbnails/)
                                                          ├──▶ OpenAI, Web Push services
-                                                         └──▶ CloudWatch Logs (JSON) ─▶ metric filters ─▶ alarms ─▶ SNS email
+                                                         └──▶ CloudWatch Logs (JSON, 14 days)
+AWS Budget (account-wide) ──▶ email at $2 forecast / $5 actual
 ```
 
 | Component | Setting |
@@ -25,13 +26,13 @@ Heroku web API ──(async invoke, queue names only)──▶ bibi-jobs:live �
 | ECR `bibi-jobs` | Immutable `sha-<commit>` tags, scan on push; keeps the newest 10 deployed images; untagged images expire after 1 day |
 | SSM `/bibi/prod/jobs/*` | SecureString, AWS-managed key; values set out of band, never in OpenTofu state |
 | Logs | `/aws/lambda/bibi-jobs`, 14-day retention |
-| Alarms → SNS email | Failed or timed-out jobs, overdue routines or pushes (>10 min), function errors, sustained throttling, dropped async events, async event age >2 min, schedule not running |
-| Budget | Alerts at $2 forecast and $5 actual per month |
+| Budget | Account-wide; emails at $2 forecast and $5 actual per month. The only alerting by design: there are no CloudWatch alarms. |
+| Observability | Every run logs a `job_run_summary` with `failed_total`, `timed_out_total`, `oldest_overdue_routine_seconds` and `oldest_pending_push_seconds`; inspect these in CloudWatch Logs when something looks wrong |
 | GitHub deploy | OIDC role, only for the `jobs-production` environment; can push images, update code, publish versions, smoke-test and move `live` |
 | Heroku identity | IAM user allowed only `lambda:InvokeFunction` on `bibi-jobs:live` |
 
 **Ownership split.**
-- **OpenTofu** (`infra/jobs`) owns configuration: memory, environment, roles, schedule, alarms.
+- **OpenTofu** (`infra/jobs`) owns configuration: memory, environment, roles, schedule, budget.
 - **CI** (`.github/workflows/deploy-jobs.yml`) owns code: images, versions and the alias.
 - OpenTofu ignores `image_uri` and the alias version.
 - OpenTofu configuration changes reach `$LATEST`. They take effect with the next CI deployment; run the workflow manually to publish them immediately.
@@ -66,7 +67,7 @@ The mitigations:
 | `mongo_app_name` | `production` |
 | `web_push_vapid_public_key`, `web_push_vapid_subject` | Same as Heroku |
 | `extra_environment` | `OPENAI_MODEL_XIAOBAO`, `OPENAI_MODEL_MEDIATION`, `OPENAI_MODEL_MODERATION`, `THUMBNAIL_SIZE` (copied from Heroku) |
-| `alarm_email` | Address for alarms and budget alerts |
+| `budget_email` | Address for the budget alerts |
 | `create_github_oidc_provider` | `false` if the account already has one |
 
 **SSM SecureString** under `/bibi/prod/jobs/`:
@@ -111,7 +112,6 @@ read -rs VALUE && aws ssm put-parameter --overwrite --type SecureString \
 5. **Secrets:**
    - Create the dedicated Atlas user.
    - Set the four SSM values.
-   - Confirm the SNS email subscription.
 6. **Heroku identity:** `aws iam create-access-key --user-name bibi-jobs-heroku-wakeup`. Keep the secret out of files and history; it goes only into Heroku at cutover.
 7. **GitHub:** create the environment and variables, then run **Deploy jobs Lambda** manually.
    - The run publishes version 1, runs `ensure_indexes` and `smoke` on it, and only then moves `live`.
@@ -146,10 +146,10 @@ Use synthetic content and your own accounts. Each check names its pass signal.
 | 4 | Push on a physical device | Install the PWA, enable notifications, send a test push; then wait for check 2 | Test push arrives within seconds (wake-up), routine push after its message; one notification each |
 | 5 | Mediation | Synthetic session with both perspectives | Reflections, then advice; one output per job (`ai_job_id`); no `failed` in summaries |
 | 6 | Image processing | Upload a test photo | Thumbnails appear; `processed.image` |
-| 7 | Retry and lease recovery | Drill: `aws lambda put-function-concurrency --function-name bibi-jobs --reserved-concurrent-executions 0` for 12 minutes during check 2, then restore to 1 (or `tofu apply`) | Throttle and overdue alarms fire; after restore, the backlog is processed exactly once and the alarms clear |
+| 7 | Retry and lease recovery | Drill: `aws lambda put-function-concurrency --function-name bibi-jobs --reserved-concurrent-executions 0` for 12 minutes during check 2, then restore to 1 (or `tofu apply`) | Summaries resume after restore with `oldest_overdue_routine_seconds` back at 0; the backlog is processed exactly once |
 | 8 | Concurrent wake-ups | Send 5 push tests in quick succession | Each delivered once; at most expected throttles, no `failed` |
 | 9 | Duplicate prevention | Repeat a push test with the same request (double tap); after the migration, check outputs per `ai_job_id` | One delivery per request; migration check reports 0 duplicates |
-| 10 | Monitoring | During drill 7, confirm email alerts; check that summaries carry `failed_total`, `timed_out_total` and the overdue fields | Alarm and OK emails received |
+| 10 | Observability | During drill 7, run a CloudWatch Logs Insights query on `event = "job_run_summary"` | Summaries show `failed_total`, `timed_out_total` and the overdue ages; the budget email address is confirmed in AWS Budgets |
 | 11 | Rollback | Rehearse the rollback below for 10 minutes, then go forward again | Heroku processes mediation and images; the Lambda shows no invocations |
 
 ## Rollback
@@ -177,13 +177,11 @@ Each step is independent and takes effect in seconds:
 | Lambda compute | ~2–5k GB-s (idle ticks 5–30 ms; routine and mediation AI time) | $0 | ~$0.03–0.07 |
 | EventBridge Scheduler | 43.8k invocations | $0 (14M free) | ~$0.04 |
 | CloudWatch Logs | ~50–80 MB ingested, 14-day retention | $0 (5 GB) | ~$0.05 |
-| Custom metrics | 2 (JobProblems, OverdueWork) | $0 (10 free) | $0.60 |
-| Alarms | 7 standard | $0 (10 free) | $0.70 |
 | ECR | ≤10 images; shared layers, roughly 0.3–0.5 GB | — | ~$0.03–0.05 |
 | SSM Standard parameters, AWS-managed KMS key | 4 | $0 | $0 |
 | S3 state bucket | a few KB | — | <$0.01 |
-| **Total** | | **≈ $0.05–0.10** | **≈ $1.5 worst case** |
+| AWS Budget | 1 budget without actions | $0 | $0 |
+| **Total** | | **≈ $0.05–0.10** | **≈ $0.20 worst case** |
 
-Free allowances (CloudWatch metrics and alarms in particular) are shared across the AWS account.
-In an account that already uses them for other projects, the metrics and alarms alone can cost up
-to about $1.30/month. That risk is the reason for the dedicated-account recommendation.
+Without CloudWatch alarms or custom metrics, the cost stays well under $1/month even if other
+projects in the account already use the free allowances.

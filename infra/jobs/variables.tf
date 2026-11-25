@@ -85,8 +85,8 @@ variable "extra_environment" {
   }
 }
 
-variable "alarm_email" {
-  description = "Email address for alarms and budget alerts (subscription must be confirmed)."
+variable "budget_email" {
+  description = "Email address for the AWS budget alerts."
   type        = string
 }
 
@@ -100,12 +100,6 @@ variable "budget_actual_alert_usd" {
   description = "Alert when actual monthly spend exceeds this amount."
   type        = number
   default     = 5
-}
-
-variable "budget_project_tag_only" {
-  description = "Limit the budget to resources tagged Project=<project>. Requires the Project cost allocation tag to be activated; otherwise the budget covers the whole account."
-  type        = bool
-  default     = false
 }
 
 variable "github_repository" {

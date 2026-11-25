@@ -9,7 +9,7 @@ mongo_app_name   = "production"
 web_push_vapid_public_key = "REPLACE-with-Heroku-XIAOBAO_WEB_PUSH_VAPID_PUBLIC_KEY"
 web_push_vapid_subject    = "https://www.bibi-zhuzhu.nl"
 
-alarm_email = "REPLACE-with-alert-address"
+budget_email = "REPLACE-with-budget-alert-address"
 
 # Mirror the non-secret Heroku settings the jobs rely on.
 extra_environment = {
