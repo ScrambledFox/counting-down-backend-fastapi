@@ -39,7 +39,7 @@ async def test_gallery_read_does_not_import_or_generate_thumbnails():
     assert await service.list_image_metadata_page(12, None) == ([], None)
     assert metadata.mock_calls == [
         # A single paginated database read, regardless of the size of the advent archive.
-        call.list_image_metadata_page(13, None, None, sensitive_only=False)
+        call.list_image_metadata_page(13, None, None, sensitive_only=False, exclude_sensitive=False)
     ]
     assert images.mock_calls == []
     assert await service.get_thumbnail_presigned_url("key", ready_sizes=[]) is None
@@ -84,7 +84,7 @@ async def test_full_gallery_page_has_no_storage_checks_or_writes():
     page = await list_images(ImageService(images, metadata), limit=12, cursor=None)
     assert len(page.items) == 12
     assert metadata.mock_calls == [
-        call.list_image_metadata_page(13, None, None, sensitive_only=False)
+        call.list_image_metadata_page(13, None, None, sensitive_only=False, exclude_sensitive=False)
     ]
     assert images.generate_thumbnail_presigned_url.await_count == 24
     images.get_thumbnail_exists.assert_not_awaited()

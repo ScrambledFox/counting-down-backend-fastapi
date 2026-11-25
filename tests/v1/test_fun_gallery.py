@@ -34,8 +34,48 @@ async def test_sensitive_filter_reaches_repository_through_each_endpoint(endpoin
     page = await endpoint(service, limit=12, cursor=None, sensitive_only=True, **kwargs)
     assert page.items == []
     metadata.list_image_metadata_page.assert_awaited_once_with(
-        13, None, uploader, sensitive_only=True
+        13, None, uploader, sensitive_only=True, exclude_sensitive=False
     )
+
+
+@pytest.mark.parametrize(
+    "endpoint,uploader",
+    [(list_images, None), (get_images_by_me, "Joris"), (get_images_for_me, "Danfeng")],
+)
+async def test_exclusion_reaches_repository_through_each_endpoint(endpoint, uploader):
+    metadata = AsyncMock(spec=ImageMetadataRepository)
+    metadata.list_image_metadata_page.return_value = []
+    service = ImageService(Mock(spec=ImageRepository), metadata)
+    session = SessionResponse(
+        session_id="test",
+        user_type="Joris",
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC),
+    )
+    kwargs = {} if endpoint is list_images else {"user_info": session}
+    await endpoint(service, limit=12, cursor=None, exclude_sensitive=True, **kwargs)
+    metadata.list_image_metadata_page.assert_awaited_once_with(
+        13, None, uploader, sensitive_only=False, exclude_sensitive=True
+    )
+
+
+async def test_exclusion_query_applies_before_pagination():
+    collection = Mock()
+    collection.find.return_value.sort.return_value.limit.return_value.to_list = AsyncMock(
+        return_value=[]
+    )
+    repo = ImageMetadataRepository.__new__(ImageMetadataRepository)
+    repo._collection = collection
+    cursor = ImageCursorPayload(created_at=datetime.now(UTC), id=str(ObjectId()))
+    await repo.list_image_metadata_page(13, cursor, "Joris", exclude_sensitive=True)
+    query = collection.find.call_args.args[0]
+    filters = query["$and"][0]
+    assert filters["uploaded_by"] == "Joris"
+    regex = filters["$nor"][0]["image_tags"]
+    for tag in ["sensitive", " Sensitive ", "SPICY", " nude\t"]:
+        assert re.search(regex["$regex"], tag, re.IGNORECASE)
+    assert not re.search(regex["$regex"], "not-sensitive", re.IGNORECASE)
+    collection.find.return_value.sort.return_value.limit.assert_called_once_with(13)
 
 
 @pytest.mark.parametrize("uploader", [None, "Joris", "Danfeng"])
@@ -108,6 +148,14 @@ async def test_sensitive_pagination_filters_before_limit_and_keeps_uploader(uplo
                 )
                 documents.append({"_id": ObjectId(photo.id), **photo.model_dump(exclude={"id"})})
         await collection.insert_many(documents)
+        missing_tags = {
+            "_id": ObjectId(),
+            "image_key": "missing-tags",
+            "uploaded_by": "Joris",
+            "media_type": "image/jpeg",
+            "uploaded_at": now + timedelta(days=1),
+        }
+        await collection.insert_one(missing_tags)
         service = ImageService(Mock(spec=ImageRepository), repo)
         found = []
         cursor = None
@@ -127,6 +175,27 @@ async def test_sensitive_pagination_filters_before_limit_and_keeps_uploader(uplo
         assert [photo.image_key for photo in found] == [doc["image_key"] for doc in expected]
         normal, _ = await service.list_image_metadata_page(20, None, uploader)
         assert any("holiday" in photo.image_tags for photo in normal)
+        visible = []
+        cursor = None
+        while True:
+            items, cursor = await service.list_image_metadata_page(
+                2, cursor, uploader, exclude_sensitive=True
+            )
+            visible.extend(items)
+            if not cursor:
+                break
+        expected_visible = [
+            doc
+            for doc in documents
+            if doc["image_key"].split("-")[0] in ["0", "4", "5"]
+            and (uploader is None or doc["uploaded_by"] == uploader)
+        ]
+        if uploader in (None, "Joris"):
+            expected_visible.append(missing_tags)
+        expected_visible.sort(key=lambda doc: (doc["uploaded_at"], doc["_id"]), reverse=True)
+        assert [photo.image_key for photo in visible] == [
+            doc["image_key"] for doc in expected_visible
+        ]
     finally:
         # Drop only this test's unique collection, never a shared collection.
         if connected:

@@ -272,3 +272,7 @@ The cache is process-local. Restart the server to clear it.
 - ICAO codes are not always available from AeroDataBox for smaller airports; those fields will be empty and the user must fill them manually.
 - The free AeroDataBox plan provides ~150 calls/month.
 - The cache is not shared across multiple server instances.
+
+# Image list filtering
+
+The `/api/v1/images`, `/api/v1/images/by_me`, and `/api/v1/images/for_me` list endpoints accept `exclude_sensitive=true` to omit images tagged `sensitive`, `spicy`, or `nude` (case-insensitive, ignoring surrounding whitespace) before pagination. The default includes all images. `sensitive_only=true` selects only those images; setting both filters returns no images.

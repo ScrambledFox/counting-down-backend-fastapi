@@ -140,10 +140,15 @@ class ImageService:
         cursor: str | None,
         user_filter: UserType | None = None,
         sensitive_only: bool = False,
+        exclude_sensitive: bool = False,
     ) -> tuple[list[ImageMetadata], str | None]:
         decoded_cursor = decode_image_cursor(cursor) if cursor else None
         docs = await self._metadata.list_image_metadata_page(
-            limit + 1, decoded_cursor, user_filter, sensitive_only=sensitive_only
+            limit + 1,
+            decoded_cursor,
+            user_filter,
+            sensitive_only=sensitive_only,
+            exclude_sensitive=exclude_sensitive,
         )
 
         has_more = len(docs) > limit
