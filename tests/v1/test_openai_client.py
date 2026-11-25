@@ -15,6 +15,12 @@ from app.schemas.v1.mediation import PrivateReflectionOutput, SharedMediationAdv
 from app.schemas.v1.xiaobao import XiaoBaoResponseEnvelope
 
 
+@pytest.fixture(autouse=True)
+def synthetic_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The streaming tests inject a fake client; they need a key to pass the configured check."""
+    monkeypatch.setattr("app.integrations.openai_client.settings.openai_api_key", "sk-synthetic")
+
+
 def _assert_object_schemas_are_strict(schema: object) -> None:
     if isinstance(schema, list):
         for item in schema:

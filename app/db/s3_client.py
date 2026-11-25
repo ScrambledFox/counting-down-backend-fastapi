@@ -1,17 +1,22 @@
+from __future__ import annotations
+
 from contextlib import closing
 from functools import lru_cache
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 from boto3.s3.transfer import TransferConfig
-from boto3.session import Session
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
-from types_boto3_s3 import S3Client
 
+from app.core.aws import get_s3_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.s3 import S3Storage
+
+if TYPE_CHECKING:
+    from types_boto3_s3 import S3Client
 
 settings = get_settings()
 
@@ -52,7 +57,7 @@ class Boto3S3Storage(S3Storage):
                 Fileobj=buf,
                 Bucket=bucket,
                 Key=key,
-                ExtraArgs=extra_args if extra_args else None,  # type: ignore[arg-type]
+                ExtraArgs=extra_args if extra_args else None,
                 Config=self._transfer_cfg,
             )
 
@@ -178,13 +183,9 @@ class Boto3S3Storage(S3Storage):
 
 @lru_cache
 def _get_s3_client() -> S3Client:
-    session = Session(
-        aws_access_key_id=settings.aws_access_key,
-        aws_secret_access_key=settings.aws_secret_key,
-        region_name=settings.aws_region,
-    )
+    session = get_s3_session()
     cfg = Config(
-        region_name=settings.aws_region,
+        region_name=settings.s3_region,
         retries={"max_attempts": 5, "mode": "standard"},
         connect_timeout=5,
         read_timeout=60,
@@ -192,7 +193,7 @@ def _get_s3_client() -> S3Client:
         max_pool_connections=20,
         s3={"addressing_style": "virtual"},
     )
-    return session.client("s3", config=cfg)  # type: ignore
+    return session.client("s3", config=cfg)
 
 
 def get_s3_storage() -> S3Storage:

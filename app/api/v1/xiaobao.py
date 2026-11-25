@@ -32,10 +32,12 @@ from app.schemas.v1.xiaobao_routine import (
     XiaoBaoRoutineRunList,
     XiaoBaoRoutineUpdate,
 )
+from app.services.job_wakeup import JobWakeup, get_job_wakeup
 from app.services.xiaobao import XiaoBaoConversationService
 from app.services.xiaobao_proposals import XiaoBaoProposalService
 from app.services.xiaobao_push import XiaoBaoPushService
 from app.services.xiaobao_routine import XiaoBaoRoutineService
+from app.workers.job_runner import JobKind
 
 router = make_router()
 SessionDep = Annotated[SessionResponse, Security(require_session)]
@@ -43,6 +45,7 @@ ConversationServiceDep = Annotated[XiaoBaoConversationService, Depends()]
 ProposalServiceDep = Annotated[XiaoBaoProposalService, Depends()]
 RoutineServiceDep = Annotated[XiaoBaoRoutineService, Depends()]
 PushServiceDep = Annotated[XiaoBaoPushService, Depends()]
+JobWakeupDep = Annotated[JobWakeup, Depends(get_job_wakeup)]
 
 
 @router.post(
@@ -300,5 +303,8 @@ async def test_push_subscription(
     payload: XiaoBaoPushTestRequest,
     service: PushServiceDep,
     session: SessionDep,
+    job_wakeup: JobWakeupDep,
 ) -> XiaoBaoPushTestResponse:
-    return await service.test(device_id, session.user_type, str(payload.client_test_id))
+    result = await service.test(device_id, session.user_type, str(payload.client_test_id))
+    await job_wakeup.wake(JobKind.PUSH)
+    return result

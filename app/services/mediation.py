@@ -38,9 +38,11 @@ from app.schemas.v1.mediation import (
     SubmitPerspectiveResponse,
 )
 from app.schemas.v1.user import UserType
+from app.services.job_wakeup import JobWakeup, get_job_wakeup
 from app.services.mediation_safety import MediationSafetyService, ModerationDecision
 from app.util.time import utc_now
 from app.util.user import get_other_user_type
+from app.workers.job_runner import JobKind
 
 ALL_MEDIATION_USER_TYPES = {UserType.JORIS, UserType.DANFENG}
 
@@ -55,6 +57,7 @@ class MediationService:
         moderation_repo: Annotated[MediationModerationRepository, Depends()],
         job_repo: Annotated[MediationJobRepository, Depends()],
         safety_service: Annotated[MediationSafetyService, Depends()],
+        job_wakeup: Annotated[JobWakeup, Depends(get_job_wakeup)],
     ) -> None:
         self._sessions = session_repo
         self._perspectives = perspective_repo
@@ -63,6 +66,7 @@ class MediationService:
         self._moderation = moderation_repo
         self._jobs = job_repo
         self._safety = safety_service
+        self._job_wakeup = job_wakeup
 
     async def _get_session_or_404(self, session_id: MongoId) -> MediationSession:
         session = await self._sessions.get_by_id(session_id)
@@ -124,7 +128,7 @@ class MediationService:
         idempotency_key: str,
     ) -> MediationAIJob:
         now = utc_now()
-        return await self._jobs.create_job_if_not_exists(
+        job = await self._jobs.create_job_if_not_exists(
             MediationAIJob(
                 job_type=job_type,
                 status=AIJobStatus.PENDING,
@@ -136,6 +140,8 @@ class MediationService:
                 updated_at=now,
             )
         )
+        await self._job_wakeup.wake(JobKind.MEDIATION)
+        return job
 
     async def _create_private_reflection_job(
         self, session_id: MongoId, perspective_id: MongoId

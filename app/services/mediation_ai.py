@@ -43,6 +43,10 @@ from app.util.time import utc_now
 settings = get_settings()
 
 
+class MediationJobSupersededError(RuntimeError):
+    """The job's lease went stale and another worker claimed it; stop without writing."""
+
+
 class MediationAIService:
     def __init__(
         self,
@@ -63,6 +67,11 @@ class MediationAIService:
         self._jobs = job_repo
         self._safety = safety_service
         self._openai = openai_client
+
+    async def _ensure_owner(self, job: MediationAIJob) -> None:
+        """Re-check ownership after a slow external call and before persisting anything."""
+        if not await self._jobs.is_owner(job):
+            raise MediationJobSupersededError
 
     async def process_job(self, job: MediationAIJob) -> None:
         if job.job_type == MediationAIJobType.PERSPECTIVE_MODERATION:
@@ -158,6 +167,7 @@ class MediationAIService:
             raise RuntimeError("Perspective moderation requires a submitted perspective")
 
         decision = await self._safety.moderate_perspective(perspective.combined_text())
+        await self._ensure_owner(job)
         moderation = await self._persist_perspective_moderation(job, decision)
         if decision.should_block_normal_mediation:
             await self._perspectives.mark_flagged(str(perspective.id), str(moderation.id))
@@ -234,6 +244,7 @@ class MediationAIService:
         )
         content = PrivateReflectionOutput.model_validate(result.parsed)
         decision = await self._safety.moderate_ai_output(content.model_dump_json())
+        await self._ensure_owner(job)
         await self._block_if_output_unsafe(job, decision)
         moderation = await self._persist_output_moderation(
             output_text=content.model_dump_json(),
@@ -251,6 +262,7 @@ class MediationAIService:
                 openai_response_id=result.response_id,
                 created_at=utc_now(),
                 moderation_result_id=str(moderation.id),
+                ai_job_id=str(job.id) if job.id else None,
             )
         )
 
@@ -277,6 +289,7 @@ class MediationAIService:
             safety_identifier=f"mediation:{job.session_id}:shared",
         )
         content = SharedMediationAdviceOutput.model_validate(result.parsed)
+        await self._ensure_owner(job)
         moderation = await self._persist_output_moderation(
             output_text=content.model_dump_json(),
             entity_type=MediationEntityType.AI_ADVICE,
@@ -291,6 +304,7 @@ class MediationAIService:
                 openai_response_id=result.response_id,
                 created_at=utc_now(),
                 moderation_result_id=str(moderation.id),
+                ai_job_id=str(job.id) if job.id else None,
             )
         )
         await self._sessions.set_latest_advice(job.session_id, str(advice.id))
@@ -325,6 +339,7 @@ class MediationAIService:
         )
         content = CommentAIResponseOutput.model_validate(result.parsed)
         decision = await self._safety.moderate_ai_output(content.model_dump_json())
+        await self._ensure_owner(job)
         await self._block_if_output_unsafe(job, decision)
         await self._persist_output_moderation(
             output_text=content.model_dump_json(),

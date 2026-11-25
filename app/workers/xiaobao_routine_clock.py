@@ -1,18 +1,15 @@
-import asyncio
 from datetime import datetime
 
 from app.core import logging
 from app.core.config import get_settings
-from app.db.mongo_client import get_db
+from app.models.mongo import AsyncDB
 from app.repositories.xiaobao import (
     XiaoBaoConversationRepository,
     XiaoBaoMessageRepository,
-    ensure_xiaobao_indexes,
 )
 from app.repositories.xiaobao_routine import (
     XiaoBaoRoutineRepository,
     XiaoBaoRoutineRunRepository,
-    ensure_xiaobao_routine_indexes,
 )
 from app.schemas.v1.xiaobao_routine import (
     XiaoBaoRoutineFrequency,
@@ -145,21 +142,17 @@ async def process_xiaobao_routine_clock_iteration(
     )
 
 
-async def run_xiaobao_routine_clock(stop_event: asyncio.Event | None = None) -> None:
-    db = get_db()
-    await ensure_xiaobao_indexes(db)
-    await ensure_xiaobao_routine_indexes(db)
-    routines = XiaoBaoRoutineRepository(db)
-    runs = XiaoBaoRoutineRunRepository(db)
-    conversations = XiaoBaoConversationRepository(db)
-    messages = XiaoBaoMessageRepository(db)
-    while stop_event is None or not stop_event.is_set():
-        try:
-            await process_xiaobao_routine_clock_iteration(routines, runs, conversations, messages)
-        except Exception:
-            logger.exception("Xiao Bao routine clock iteration failed")
-        await asyncio.sleep(settings.xiaobao_routine_clock_poll_interval_seconds)
-
-
-if __name__ == "__main__":
-    asyncio.run(run_xiaobao_routine_clock())
+def build_routine_clock_repositories(
+    db: AsyncDB,
+) -> tuple[
+    XiaoBaoRoutineRepository,
+    XiaoBaoRoutineRunRepository,
+    XiaoBaoConversationRepository,
+    XiaoBaoMessageRepository,
+]:
+    return (
+        XiaoBaoRoutineRepository(db),
+        XiaoBaoRoutineRunRepository(db),
+        XiaoBaoConversationRepository(db),
+        XiaoBaoMessageRepository(db),
+    )

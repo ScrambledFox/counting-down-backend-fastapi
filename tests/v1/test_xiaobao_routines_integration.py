@@ -46,6 +46,7 @@ from app.services.xiaobao_routine import XiaoBaoRoutineService
 from app.services.xiaobao_routine_execution import XiaoBaoRoutineExecutionService
 from app.services.xiaobao_routine_policy import XIAOBAO_ROUTINE_UNREAD_INACTIVITY_THRESHOLD
 from app.util.time import utc_now
+from app.workers.job_runner import JobResult
 from app.workers.xiaobao_routine_clock import process_xiaobao_routine_clock_iteration
 from app.workers.xiaobao_routine_worker import process_one_xiaobao_routine_work_item
 
@@ -716,7 +717,7 @@ async def test_guarded_repair_backoff_does_not_block_unrelated_routine(
 
     processed = await process_one_xiaobao_routine_work_item(service, routines, runs)
 
-    assert processed is True
+    assert processed == JobResult.PROCESSED
     service.repair_committed_delivery.assert_not_awaited()
     service.process.assert_awaited_once()
     claimed_b = service.process.await_args.args[0]

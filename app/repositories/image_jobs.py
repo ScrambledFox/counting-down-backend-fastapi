@@ -10,6 +10,8 @@ from app.util.time import utc_now
 
 settings = get_settings()
 
+IMAGE_JOB_LEASE_SECONDS = 300
+
 
 def completed_advent_cutoff(now: datetime) -> datetime:
     now = now.astimezone(UTC)
@@ -55,7 +57,7 @@ class ImageJobRepository:
                 "$set": {
                     f"{field}.state": "processing",
                     f"{field}.token": uuid4().hex,
-                    f"{field}.lease_until": now + timedelta(seconds=300),
+                    f"{field}.lease_until": now + timedelta(seconds=IMAGE_JOB_LEASE_SECONDS),
                 },
                 "$inc": {f"{field}.attempts": 1},
             },
@@ -169,7 +171,8 @@ class ImageJobRepository:
             {
                 "$set": {
                     f"{field}.state": "failed",
-                    f"{field}.last_error": str(error)[:500],
+                    # The type only: messages can carry provider or storage response bodies.
+                    f"{field}.last_error": type(error).__name__,
                     f"{field}.retry_at": utc_now() + timedelta(seconds=delay),
                 },
                 "$unset": {f"{field}.lease_until": ""},

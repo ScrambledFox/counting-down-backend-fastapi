@@ -28,6 +28,7 @@ from app.schemas.v1.xiaobao_push import (
     XiaoBaoPushTestResponse,
 )
 from app.util.time import utc_now
+from app.workers.job_runner import JobResult
 
 settings = get_settings()
 
@@ -210,23 +211,28 @@ class XiaoBaoPushDeliveryService:
         self._messages = messages
         self._transport = transport
 
-    async def process(self, item: XiaoBaoPushDelivery) -> None:
+    async def process(self, item: XiaoBaoPushDelivery) -> JobResult:
+        """Deliver one claimed push and report the outcome.
+
+        Expected final outcomes (revoked subscription, missing message, expired endpoint) are
+        ``TERMINAL``; retryable or unexpected transport errors are ``FAILED``.
+        """
         if not item.id or not item.subscription_id:
-            return
+            return JobResult.TERMINAL
         subscription = await self._subscriptions.get_by_id(item.subscription_id)
         if not subscription or subscription.owner_user_type != item.owner_user_type:
             await self._deliveries.mark_terminal(item, "subscription_revoked")
-            return
+            return JobResult.TERMINAL
         cipher = XiaoBaoPushCipher()
         data: dict[str, object]
         if item.kind == XiaoBaoPushDeliveryKind.INBOX_MESSAGE:
             if not item.message_id:
                 await self._deliveries.mark_terminal(item, "missing_message")
-                return
+                return JobResult.TERMINAL
             message = await self._messages.get_completed_routine_message(item.message_id)
             if not message:
                 await self._deliveries.mark_terminal(item, "missing_message")
-                return
+                return JobResult.TERMINAL
             data = {"v": 1, "kind": "INBOX", "message_id": str(item.message_id)}
         else:
             data = {"v": 1, "kind": "TEST", "message_id": str(item.id)}
@@ -247,10 +253,12 @@ class XiaoBaoPushDeliveryService:
                     subscription.device_id, subscription.owner_user_type
                 )
                 await self._deliveries.cancel_for_subscription(str(subscription.id))
-            elif exc.retryable:
+                return JobResult.TERMINAL
+            if exc.retryable:
                 await self._deliveries.retry(item, exc.code)
             else:
                 await self._deliveries.mark_terminal(item, exc.code)
-            return
+            return JobResult.FAILED
         await self._subscriptions.record_success(str(subscription.id))
         await self._deliveries.mark_delivered(item)
+        return JobResult.PROCESSED

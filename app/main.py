@@ -9,19 +9,26 @@ from app.api.v1 import router as v1_api_router
 from app.api.v1.error_handlers import register_exception_handlers
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
+from app.db.indexes import ensure_all_indexes
 from app.db.mongo_client import get_db
-from app.repositories.airport import ensure_airport_indexes
-from app.repositories.mediation import ensure_mediation_indexes
-from app.repositories.relationship_care import ensure_relationship_care_indexes
-from app.repositories.relationship_profile import ensure_relationship_profile_indexes
-from app.repositories.xiaobao import ensure_xiaobao_indexes
-from app.repositories.xiaobao_push import ensure_xiaobao_push_indexes
-from app.repositories.xiaobao_routine import ensure_xiaobao_routine_indexes
 from app.schemas.v1.health import HealthResponse
-from app.workers.image_worker import run_image_worker
-from app.workers.mediation_worker import run_mediation_worker
+from app.workers.job_handlers import build_job_handlers, in_process_job_kinds
+from app.workers.job_runner import JobKind, run_jobs
 
 settings = get_settings()
+
+
+async def run_in_process_jobs(kinds: list[JobKind], stop_event: asyncio.Event) -> None:
+    """Work on the enabled queues inside the web process until shutdown.
+
+    Handlers are built inside the task so a misconfigured job dependency cannot stop the API
+    from starting.
+    """
+    try:
+        handlers = build_job_handlers(get_db(), kinds)
+        await run_jobs(handlers, continuous=True, stop_event=stop_event)
+    except Exception:
+        get_logger(__name__).exception("In-process background jobs stopped")
 
 
 @asynccontextmanager
@@ -29,35 +36,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = setup_logging()
     logger.info("Application startup")
 
-    await ensure_mediation_indexes(get_db())
-    await ensure_airport_indexes(get_db())
-    await ensure_relationship_care_indexes(get_db())
-    await ensure_relationship_profile_indexes(get_db())
-    await ensure_xiaobao_indexes(get_db())
-    await ensure_xiaobao_routine_indexes(get_db())
-    await ensure_xiaobao_push_indexes(get_db())
-    worker_stop_event: asyncio.Event | None = None
-    worker_task: asyncio.Task[None] | None = None
-    image_stop = asyncio.Event()
-    image_task = (
-        asyncio.create_task(run_image_worker(image_stop)) if settings.image_worker_enabled else None
-    )
+    if settings.ensure_indexes_on_startup:
+        await ensure_all_indexes(get_db())
 
-    if settings.mediation_worker_enabled:
-        worker_stop_event = asyncio.Event()
-        worker_task = asyncio.create_task(run_mediation_worker(worker_stop_event))
+    stop_event = asyncio.Event()
+    kinds = in_process_job_kinds()
+    jobs_task = asyncio.create_task(run_in_process_jobs(kinds, stop_event)) if kinds else None
     try:
         yield
     finally:
-        image_stop.set()
-        if image_task:
-            image_task.cancel()
+        stop_event.set()
+        if jobs_task:
+            # Cancelling mid-item is safe: the item's lease expires and it is retried.
+            jobs_task.cancel()
             with suppress(asyncio.CancelledError):
-                await image_task
-        if worker_stop_event:
-            worker_stop_event.set()
-        if worker_task:
-            worker_task.cancel()
+                await jobs_task
 
         logger.info("Application shutdown")
 
