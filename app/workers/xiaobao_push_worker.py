@@ -12,6 +12,7 @@ from app.services.xiaobao_push import (
     XiaoBaoPushDeliveryService,
     XiaoBaoPushDispatchService,
 )
+from app.workers.job_runner import JobResult
 
 settings = get_settings()
 logger = logging.get_logger(__name__)
@@ -21,7 +22,7 @@ async def process_one_xiaobao_push_work_item(
     dispatch: XiaoBaoPushDispatchService,
     delivery: XiaoBaoPushDeliveryService,
     deliveries: XiaoBaoPushDeliveryRepository,
-) -> bool:
+) -> JobResult:
     try:
         dispatched = await dispatch.dispatch_pending(
             limit=settings.xiaobao_routine_materialize_batch_size
@@ -33,11 +34,11 @@ async def process_one_xiaobao_push_work_item(
             "Xiao Bao push dispatch iteration failed",
             extra={"event": "job_item_failed", "job_kind": "push", **error_fields(exc)},
         )
-        return False
+        return JobResult.FAILED
     if not item:
-        return bool(dispatched)
+        return JobResult.PROCESSED if dispatched else JobResult.IDLE
     try:
-        await delivery.process(item)
+        return await delivery.process(item)
     except Exception as exc:
         logger.error(
             "Xiao Bao push delivery failed",
@@ -49,7 +50,7 @@ async def process_one_xiaobao_push_work_item(
             },
         )
         await deliveries.mark_terminal(item, "unknown")
-    return True
+        return JobResult.FAILED
 
 
 def build_push_services(

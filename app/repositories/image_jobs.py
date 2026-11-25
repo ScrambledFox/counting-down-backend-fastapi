@@ -171,7 +171,8 @@ class ImageJobRepository:
             {
                 "$set": {
                     f"{field}.state": "failed",
-                    f"{field}.last_error": str(error)[:500],
+                    # The type only: messages can carry provider or storage response bodies.
+                    f"{field}.last_error": type(error).__name__,
                     f"{field}.retry_at": utc_now() + timedelta(seconds=delay),
                 },
                 "$unset": {f"{field}.lease_until": ""},

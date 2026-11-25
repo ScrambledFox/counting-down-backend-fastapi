@@ -39,6 +39,7 @@ from app.services.xiaobao_routine import XiaoBaoRoutineService
 from app.services.xiaobao_routine_execution import XiaoBaoRoutineExecutionService
 from app.services.xiaobao_schedule import next_scheduled_at
 from app.util.time import utc_now
+from app.workers.job_runner import JobResult
 from app.workers.xiaobao_routine_clock import (
     auto_pause_unread_inactive_routines,
     materialize_due_routines,
@@ -161,7 +162,7 @@ async def test_committed_delivery_repair_runs_before_exhaustion_handling() -> No
 
     processed = await process_one_xiaobao_routine_work_item(service, routines, runs)
 
-    assert processed is True
+    assert processed == JobResult.PROCESSED
     service.repair_committed_delivery.assert_awaited_once_with(run)
     runs.fail_exhausted_stale.assert_not_awaited()
     runs.claim_next.assert_not_awaited()
@@ -215,7 +216,8 @@ async def test_corrupt_guarded_repair_does_not_stall_unrelated_routine() -> None
 
     processed = await process_one_xiaobao_routine_work_item(service, routines, runs)
 
-    assert processed is True
+    # The repair failure is reported even though unrelated work still ran.
+    assert processed == JobResult.FAILED
     runs.mark_failed_or_retry.assert_awaited_once_with(repair, "RuntimeError")
     runs.fail_exhausted_stale.assert_awaited_once_with(excluded_routine_ids=[OID_1])
     runs.claim_next.assert_awaited_once_with(

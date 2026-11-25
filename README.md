@@ -162,7 +162,8 @@ example a missing API key) fails only its own turns and is retried after its idl
 
 Mediation jobs are fenced by a claim token: only the current owner can complete, fail or retry a
 job, ownership is re-checked after each slow external call before anything is persisted, and AI
-outputs (reflections, advice, AI comments) are written at most once per job.
+outputs (reflections, advice, AI comments) are deduplicated per job on a best-effort basis until
+a unique index is introduced (see the ADR).
 
 Push delivery is at-least-once: a crash after a push is sent but before it is recorded can repeat
 it, and the service worker collapses repeats through the notification tag.
@@ -184,7 +185,8 @@ Structured fields (job kind, counts, durations, error types and code locations, 
 rendered from an allowlist, as `key=value` text or, with `LOG_FORMAT=json`, one JSON object per
 line. Job logs never include exception messages, prompts, generated content or provider
 responses. Each run ends with a `job_run_summary` event carrying `processed_total`,
-`failed_total`, `timed_out_total` and `duration_ms`. The run itself succeeds even when items fail,
+`terminal_total` (expected outcomes such as revoked push subscriptions), `failed_total`,
+`timed_out_total` and `duration_ms`. The run itself succeeds even when items fail,
 so alert on those fields.
 
 The web process can also work on queues itself, controlled by `IMAGE_WORKER_ENABLED` (default on),

@@ -6,7 +6,7 @@ from app.core.config import get_settings
 from app.models.mongo import AsyncDB
 from app.repositories.image_jobs import IMAGE_JOB_LEASE_SECONDS
 from app.workers.image_worker import build_image_job_services, process_one_image_job
-from app.workers.job_runner import JobHandler, JobKind
+from app.workers.job_runner import JobHandler, JobKind, JobResult
 from app.workers.mediation_worker import build_mediation_job_services, process_one_mediation_job
 from app.workers.xiaobao_push_worker import build_push_services, process_one_xiaobao_push_work_item
 from app.workers.xiaobao_routine_clock import (
@@ -35,7 +35,7 @@ def within_lease(lease_seconds: float) -> float:
 def _lazy_queue[Services](
     kind: JobKind,
     build: Callable[[], Services],
-    process: Callable[[Services], Awaitable[bool]],
+    process: Callable[[Services], Awaitable[JobResult]],
     *,
     timeout_seconds: float,
     idle_interval_seconds: float,
@@ -48,7 +48,7 @@ def _lazy_queue[Services](
     """
     services: Services | None = None
 
-    async def process_one() -> bool:
+    async def process_one() -> JobResult:
         nonlocal services
         if services is None:
             services = build()
@@ -63,8 +63,9 @@ def _lazy_queue[Services](
 
 
 def _clock_handler(db: AsyncDB) -> JobHandler:
-    async def process(repositories: tuple) -> bool:
-        return await process_xiaobao_routine_clock_iteration(*repositories) > 0
+    async def process(repositories: tuple) -> JobResult:
+        materialized = await process_xiaobao_routine_clock_iteration(*repositories)
+        return JobResult.PROCESSED if materialized else JobResult.IDLE
 
     return _lazy_queue(
         JobKind.CLOCK,

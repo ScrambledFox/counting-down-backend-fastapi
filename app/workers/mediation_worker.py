@@ -13,6 +13,7 @@ from app.repositories.mediation import (
 )
 from app.services.mediation_ai import MediationAIService, MediationJobSupersededError
 from app.services.mediation_safety import MediationSafetyService
+from app.workers.job_runner import JobResult
 
 settings = get_settings()
 logger = logging.get_logger(__name__)
@@ -36,7 +37,7 @@ def build_mediation_job_services(db: AsyncDB) -> tuple[MediationJobRepository, M
 
 async def process_one_mediation_job(
     jobs: MediationJobRepository, service: MediationAIService
-) -> bool:
+) -> JobResult:
     """Claim and process at most one mediation AI job; failures are retried by the queue.
 
     Every state change is fenced by the claim's lease token, so a worker whose lease went stale
@@ -46,7 +47,7 @@ async def process_one_mediation_job(
     await jobs.fail_exhausted_stale_processing_jobs(stale_after)
     job = await jobs.claim_next_pending_job(stale_after)
     if not job:
-        return False
+        return JobResult.IDLE
     try:
         await service.process_job(job)
     except MediationJobSupersededError:
@@ -54,7 +55,7 @@ async def process_one_mediation_job(
             "Mediation AI job was claimed by another worker",
             extra={"event": "job_superseded", "job_kind": "mediation"},
         )
-        return True
+        return JobResult.TERMINAL
     except Exception as exc:
         fields = error_fields(exc)
         logger.error(
@@ -63,10 +64,11 @@ async def process_one_mediation_job(
         )
         # Store the error type only; messages may contain provider response bodies.
         await jobs.mark_failed_or_retry(job, fields["error_type"])
-        return True
+        return JobResult.FAILED
     if await jobs.mark_completed(job) is None:
         logger.warning(
             "Mediation AI job was claimed by another worker before completion",
             extra={"event": "job_superseded", "job_kind": "mediation"},
         )
-    return True
+        return JobResult.TERMINAL
+    return JobResult.PROCESSED

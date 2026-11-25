@@ -9,6 +9,7 @@ from app.repositories.image import ImageRepository
 from app.repositories.image_jobs import ImageJobRepository
 from app.repositories.image_metadata import ImageMetadataRepository
 from app.services.image import ImageService
+from app.workers.job_runner import JobResult
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -36,7 +37,7 @@ async def process_thumbnail(jobs: ImageJobRepository, service: ImageService, job
     await jobs.finish_thumbnail(job, sizes)
 
 
-async def process_one_image_job(jobs: ImageJobRepository, service: ImageService) -> bool:
+async def process_one_image_job(jobs: ImageJobRepository, service: ImageService) -> JobResult:
     """Claim and process at most one advent archive or thumbnail job.
 
     Sequential work bounds CPU and storage load; durable leases survive restarts.
@@ -62,8 +63,9 @@ async def process_one_image_job(jobs: ImageJobRepository, service: ImageService)
                 extra={"event": "job_item_failed", "job_kind": "image", **error_fields(exc)},
             )
             await jobs.fail(collection, field, job, exc)
-        return True
-    return False
+            return JobResult.FAILED
+        return JobResult.PROCESSED
+    return JobResult.IDLE
 
 
 def build_image_job_services(db: AsyncDB) -> tuple[ImageJobRepository, ImageService]:

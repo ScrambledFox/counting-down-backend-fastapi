@@ -46,18 +46,27 @@ class JobKind(StrEnum):
 FAST_KINDS = frozenset({JobKind.CLOCK, JobKind.PUSH})
 
 
+class JobResult(StrEnum):
+    """Outcome of one ``process_one`` call. Timeouts are recorded by the runner itself."""
+
+    IDLE = "idle"  # no work was available
+    PROCESSED = "processed"  # work completed successfully
+    TERMINAL = "terminal"  # expected final outcome, e.g. a revoked push subscription
+    FAILED = "failed"  # unexpected failure; the queue persisted a retry or failure state
+
+
 @dataclass(frozen=True)
 class JobHandler:
     """One durable queue.
 
-    ``process_one`` claims and processes at most one item and returns whether it found work.
+    ``process_one`` claims and processes at most one item and reports a ``JobResult``.
     ``timeout_seconds`` must stay below the queue's lease so a cancelled item is retried by the
     next runner instead of overlapping with a still-running one. ``idle_interval_seconds`` is the
-    pause before polling an empty (or failing) queue again.
+    pause before polling an empty or failing queue again.
     """
 
     kind: JobKind
-    process_one: Callable[[], Awaitable[bool]]
+    process_one: Callable[[], Awaitable[JobResult]]
     timeout_seconds: float
     idle_interval_seconds: float
 
@@ -65,6 +74,7 @@ class JobHandler:
 @dataclass
 class JobRunSummary:
     processed: dict[str, int] = field(default_factory=dict)
+    terminal: dict[str, int] = field(default_factory=dict)
     timed_out: dict[str, int] = field(default_factory=dict)
     failed: dict[str, int] = field(default_factory=dict)
     duration_ms: int = 0
@@ -80,9 +90,11 @@ class JobRunSummary:
         """Counts only; safe to log and to return from a Lambda invocation."""
         return {
             "processed": self.processed,
+            "terminal": self.terminal,
             "failed": self.failed,
             "timed_out": self.timed_out,
             "processed_total": sum(self.processed.values()),
+            "terminal_total": sum(self.terminal.values()),
             "failed_total": sum(self.failed.values()),
             "timed_out_total": sum(self.timed_out.values()),
             "duration_ms": self.duration_ms,
@@ -127,10 +139,11 @@ class _Lane:
             return True
         return self._clock() + handler.timeout_seconds + DEADLINE_MARGIN_SECONDS <= self._deadline
 
-    async def _run_one(self, handler: JobHandler) -> bool:
+    async def _run_one(self, handler: JobHandler) -> JobResult | None:
+        """Run one item; return its result, or None when it timed out."""
         started = self._clock()
         try:
-            worked = await asyncio.wait_for(handler.process_one(), handler.timeout_seconds)
+            result = await asyncio.wait_for(handler.process_one(), handler.timeout_seconds)
         except TimeoutError:
             # The item's lease outlives this timeout, so another run retries it safely.
             logger.warning(
@@ -142,7 +155,7 @@ class _Lane:
                 },
             )
             self._summary.count(self._summary.timed_out, handler.kind)
-            return True
+            return None
         except Exception as exc:
             # Never log the exception message: it may hold provider bodies or private content.
             logger.error(
@@ -154,11 +167,15 @@ class _Lane:
                     **error_fields(exc),
                 },
             )
-            self._summary.count(self._summary.failed, handler.kind)
-            return False
-        if worked:
-            self._summary.count(self._summary.processed, handler.kind)
-        return worked
+            result = JobResult.FAILED
+        bucket = {
+            JobResult.PROCESSED: self._summary.processed,
+            JobResult.TERMINAL: self._summary.terminal,
+            JobResult.FAILED: self._summary.failed,
+        }.get(result)
+        if bucket is not None:
+            self._summary.count(bucket, handler.kind)
+        return result
 
     async def run_pass(self) -> bool:
         """Give every due handler one turn; return whether any of them found work."""
@@ -166,7 +183,11 @@ class _Lane:
         for handler in self._handlers:
             if self._clock() < self._next_due[handler.kind] or not self._fits_deadline(handler):
                 continue
-            worked = await self._run_one(handler)
+            result = await self._run_one(handler)
+            # Successful or terminal work may be followed by more; a timed-out item keeps its
+            # lease, so the queue may hold other items. Empty and failing queues back off,
+            # which rules out busy loops on persistent failures.
+            worked = result in (JobResult.PROCESSED, JobResult.TERMINAL, None)
             worked_any = worked_any or worked
             self._next_due[handler.kind] = (
                 self._clock() if worked else self._clock() + handler.idle_interval_seconds

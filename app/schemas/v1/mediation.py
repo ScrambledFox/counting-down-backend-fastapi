@@ -189,7 +189,7 @@ class MediationAIReflection(CustomModel):
     openai_response_id: str | None = None
     created_at: datetime
     moderation_result_id: MongoId | None = None
-    # The job that produced this output; outputs are written at most once per job.
+    # The job that produced this output; used for best-effort per-job deduplication.
     ai_job_id: MongoId | None = None
 
 

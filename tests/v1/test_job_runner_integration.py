@@ -22,7 +22,7 @@ from app.schemas.v1.mediation import AIJobStatus, MediationAIJob, MediationAIJob
 from app.schemas.v1.user import UserType
 from app.schemas.v1.xiaobao_push import XiaoBaoPushDeliveryStatus
 from app.util.time import utc_now
-from app.workers.job_runner import JobHandler, JobKind, run_jobs
+from app.workers.job_runner import JobHandler, JobKind, JobResult, run_jobs
 
 settings = get_settings()
 SUBSCRIPTION_ID = "64b64c000000000000000102"
@@ -79,14 +79,14 @@ async def test_concurrent_wakeups_deliver_each_push_once(job_db: AsyncDB) -> Non
     await enqueue_tests(deliveries, 12)
     sent: list[str] = []
 
-    async def process_one() -> bool:
+    async def process_one() -> JobResult:
         item = await deliveries.claim_next(lease_seconds=30)
         if item is None:
-            return False
+            return JobResult.IDLE
         sent.append(str(item.id))
         await asyncio.sleep(0.01)
         assert await deliveries.mark_delivered(item)
-        return True
+        return JobResult.PROCESSED
 
     def handler() -> JobHandler:
         return JobHandler(JobKind.PUSH, process_one, timeout_seconds=10, idle_interval_seconds=0.05)

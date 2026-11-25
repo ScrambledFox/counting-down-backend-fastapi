@@ -30,6 +30,7 @@ from app.services.relationship_profile import RelationshipProfileService
 from app.services.todo import TodoService
 from app.services.xiaobao_context import RelationshipContextService
 from app.services.xiaobao_routine_execution import XiaoBaoRoutineExecutionService
+from app.workers.job_runner import JobResult
 
 settings = get_settings()
 logger = logging.get_logger(__name__)
@@ -96,13 +97,19 @@ async def process_one_xiaobao_routine_work_item(
     service: XiaoBaoRoutineExecutionService,
     routines: XiaoBaoRoutineRepository,
     runs: XiaoBaoRoutineRunRepository,
-) -> bool:
+) -> JobResult:
+    """Repair or execute at most one routine run.
+
+    A failed repair keeps its back-off and the call continues with unrelated work, but the call
+    then reports ``FAILED`` so the failure is counted.
+    """
     repair_candidates = await routines.list_committed_delivery_repairs(
         limit=settings.xiaobao_routine_materialize_batch_size
     )
     # The repair batch is bounded, but every durable delivery barrier must be excluded from
     # ordinary claim/exhaustion paths, including barriers beyond this sweep's repair batch.
     guarded_routine_ids = await routines.list_committed_delivery_guarded_routine_ids()
+    repair_failed = False
     for routine in repair_candidates:
         run_id = routine.committed_delivery_pending_run_id
         if not run_id:
@@ -114,7 +121,7 @@ async def process_one_xiaobao_routine_work_item(
             continue
         try:
             await service.repair_committed_delivery(repair)
-            return True
+            return JobResult.PROCESSED
         except Exception as exc:
             logger.error(
                 "Xiao Bao committed routine delivery repair failed",
@@ -126,6 +133,7 @@ async def process_one_xiaobao_routine_work_item(
                 },
             )
             await runs.mark_failed_or_retry(repair, type(exc).__name__)
+            repair_failed = True
             # Keep this routine's durable barrier and continue with unrelated work. Its failed
             # repair receives available_at backoff and cannot be reclaimed in a tight loop.
             continue
@@ -140,7 +148,7 @@ async def process_one_xiaobao_routine_work_item(
         excluded_routine_ids=guarded_routine_ids,
     )
     if not run:
-        return False
+        return JobResult.FAILED if repair_failed else JobResult.IDLE
     try:
         await service.process(run)
     except Exception as exc:
@@ -155,4 +163,5 @@ async def process_one_xiaobao_routine_work_item(
         )
         failed = await runs.mark_failed_or_retry(run, type(exc).__name__)
         await _finish_terminal_reminder_failure(routines, failed)
-    return True
+        return JobResult.FAILED
+    return JobResult.FAILED if repair_failed else JobResult.PROCESSED

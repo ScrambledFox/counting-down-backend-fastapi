@@ -6,7 +6,14 @@ from collections.abc import Iterator
 import pytest
 
 from app.core.logging import LOG_NAME, StructuredFormatter, error_fields
-from app.workers.job_runner import JobHandler, JobKind, JobRunSummary, log_job_run_summary, run_jobs
+from app.workers.job_runner import (
+    JobHandler,
+    JobKind,
+    JobResult,
+    JobRunSummary,
+    log_job_run_summary,
+    run_jobs,
+)
 
 PRIVATE = "she said the argument about the move still hurts"
 
@@ -67,7 +74,7 @@ def test_error_fields_describe_type_and_location_without_the_message() -> None:
 async def test_runner_failure_log_never_contains_the_exception_message(
     app_logs: pytest.LogCaptureFixture,
 ) -> None:
-    async def leaky() -> bool:
+    async def leaky() -> JobResult:
         raise RuntimeError(f"provider rejected prompt: {PRIVATE}")
 
     await run_jobs(

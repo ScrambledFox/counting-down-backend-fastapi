@@ -1,8 +1,8 @@
 # ADR 0001: Serverless hosting with finite, event-driven background jobs
 
-- **Status:** Accepted (direction). Phase 1 implemented and revised after review; Phases 2 and 3
-  pending approval.
-- **Dates:** 2026-11-24 (decision, Phase 1), 2026-11-25 (review fixes)
+- **Status:** Accepted (direction). Phase 1 implemented and revised after two reviews; Phases 2
+  and 3 pending approval.
+- **Dates:** 2026-11-24 (decision, Phase 1), 2026-11-25 (review fixes, final review fixes)
 - **Deciders:** Joris (owner), with Claude Code as implementer
 - **Scope:** `counting-down-fastapi` hosting and background execution; `counting-down` API URL
   configuration.
@@ -104,8 +104,8 @@ Further properties:
 - **Ownership re-checks.** `MediationAIService` re-checks ownership after each slow external call
   (moderation, generation) and before any write. A superseded worker stops with
   `MediationJobSupersededError` and persists nothing.
-- **Outputs at most once per job.** Reflections, advice and AI comments record `ai_job_id` and
-  are written with insert-if-absent keyed on it. A late writer receives the stored output and
+- **Best-effort output deduplication per job.** Reflections, advice and AI comments record
+  `ai_job_id` and are written with insert-if-absent keyed on it. A late writer receives the stored output and
   never replaces it. The supporting indexes are sparse and non-unique, so legacy documents can
   never block startup.
 - **Sanitized error storage.** A failed job's `error_message` stores the error type, not the
@@ -173,7 +173,7 @@ mediation and image items are still running.
 - **Changed application behaviour after the merge-triggered deploy:**
   - The web dyno runs image and mediation jobs through the new runner: same flags, same idle
     polls, separate lanes.
-  - Mediation jobs are fenced by tokens; outputs are written once per job; stored job errors
+  - Mediation jobs are fenced by tokens; outputs are deduplicated per job (best effort); stored job errors
     hold the error type only.
   - The Procfile's `clock` and `push-worker` types are removed (both at 0 dynos) and `worker`
     now runs the drain loop (also at 0).
@@ -182,6 +182,47 @@ mediation and image items are still running.
   - Push enqueue races return the stored delivery instead of an error.
   - Indexes are still created at startup, now including the new sparse `ai_job_id` indexes.
   - Routines and push remain inactive until a worker runs, exactly as today.
+
+## Final review fixes (2026-11-25)
+
+### Job outcome contract
+
+Workers handle many failures internally: they persist a retry or failure state and carry on. A
+plain "found work" boolean therefore reported failed jobs as successes. Every single-item
+function now returns a `JobResult`, and the runner adds timeouts:
+
+| Result | Meaning | Counted as | Queue polling |
+|---|---|---|---|
+| `IDLE` | No work available | — | Backs off (idle interval) |
+| `PROCESSED` | Work completed | `processed` | Continues immediately |
+| `TERMINAL` | Expected final outcome: revoked, expired or missing push target; superseded mediation worker | `terminal` | Continues immediately |
+| `FAILED` | Unexpected failure; retry or failure state persisted by the queue, or an exception reached the runner | `failed` | Backs off, so no busy loop |
+| *timeout* | Item exceeded its timeout; it keeps its lease | `timed_out` | Continues |
+
+Classification per queue:
+- **Push:** retryable or unexpected transport errors are `FAILED`; expiry, revocation and a
+  missing message are `TERMINAL`.
+- **Mediation:** a handled exception is `FAILED`; a superseded worker is `TERMINAL`.
+- **Image:** a handled exception is `FAILED`.
+- **Routine:** a failed run, or a failed delivery repair, is `FAILED`. After a failed repair the
+  call still continues with unrelated work, as before, but reports `FAILED`.
+- **Clock:** a pass that materialized runs is `PROCESSED`.
+
+`job_run_summary` reports per-kind and total `processed`, `terminal`, `failed` and `timed_out`.
+Its `outcome` is `unsuccessful_items` (logged at WARNING) whenever `failed_total` or
+`timed_out_total` is non-zero. Expected terminal outcomes never raise alarms.
+
+### Other fixes
+
+- **Pre-merge CI.** `.github/workflows/ci.yml` runs lint, format checks and the full test suite
+  on pull requests into `master`. It uses a throwaway MongoDB service container, has no secrets,
+  `contents: read` permissions and no deploy step. `deploy.yml` is unchanged.
+- **Image job errors** now store the error type only.
+- **Test credential guard.** `tests/conftest.py` blanks every credential setting before the app
+  is imported (environment variables override `.env`). It points boto3's shared files at
+  `/dev/null` and disables instance metadata. A test asserts that no credentials are visible.
+  The guard exposed three OpenAI client tests that had silently relied on a developer's real
+  key; they now use a synthetic one.
 
 ## Amendments and status
 
@@ -202,15 +243,12 @@ mediation and image items are still running.
 
 ## Known risks and deferred work
 
+- **Mediation output deduplication is best-effort.** It becomes guaranteed only once a unique
+  index on `ai_job_id` exists. The safe migration is a Phase 2 readiness item.
+
 - **Push is at-least-once.** A crash between sending and recording can repeat a push.
-- **Mediation output residual race** (see review fix 1); a unique index is deferred.
-- **Image job errors** still store `str(error)[:500]` in `thumbnail_job.last_error` /
-  `archive.last_error`. These are storage and processing errors, not user content. Sanitizing
-  them is a small follow-up.
 - **Non-job request paths** still use `logger.exception`, which includes exception messages.
   Reviewing them belongs with the Phase 3 API work.
-- **No CI on PRs into `master`.** Add a pull-request trigger for `master` (recommended before
-  Phase 2).
 - **Phase 2 infrastructure** (async invoke configuration, alarms, metric filters, ECR protection)
   is designed but not provisioned.
 
@@ -224,9 +262,20 @@ Phase 2 may start only when all of the following hold:
    connects. Nothing is broadened without explicit approval.
 3. The AWS account is chosen (a dedicated account in an Organization is recommended) and an
    OpenTofu state location is agreed.
-4. A CI pull-request trigger for `master` is added, so infrastructure and application changes are
-   tested before merge.
-5. Phase 2 configuration values are agreed:
+4. The pre-merge CI workflow (`ci.yml`) is green on the PR and required before merging to
+   `master`. Enabling it as a required check in branch protection is an owner setting.
+5. **A safe unique-index migration for mediation outputs**, so per-job deduplication becomes
+   guaranteed rather than best-effort:
+   1. Count duplicates first: `$group` by `ai_job_id` where it is a string, keeping groups with
+      more than one document, in `mediation_ai_reflections`, `mediation_advices` and
+      `mediation_comments`.
+   2. If any exist, agree a resolution (keep the earliest document and re-point
+      `latest_advice_id` where needed) before changing data.
+   3. Add unique indexes with `partialFilterExpression: {ai_job_id: {$type: "string"}}` from
+      `scripts/ensure_indexes.py` only, never at web startup, so a failed build cannot stop the
+      API.
+   4. Treat a `DuplicateKeyError` on insert as "already stored" and read the existing output.
+6. Phase 2 configuration values are agreed:
    - Lambda: `AWS_S3_REGION`, `LOG_FORMAT=json`, `ENSURE_INDEXES_ON_STARTUP=false`, and
      `MONGO_MAX_POOL_SIZE` around 5.
    - Heroku: `JOB_WAKEUP_MODE=lambda`, `JOB_WAKEUP_LAMBDA_FUNCTION_NAME`,

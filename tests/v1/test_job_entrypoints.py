@@ -13,7 +13,7 @@ from app.db.mongo_client import MotorMongoDBClient
 from app.services import job_wakeup
 from app.services.job_wakeup import LambdaJobWakeup, NoopJobWakeup, wakeup_payload
 from app.workers import drain, job_handlers
-from app.workers.job_runner import JobHandler, JobKind
+from app.workers.job_runner import JobHandler, JobKind, JobResult
 
 # --- Wake-ups ------------------------------------------------------------------------------
 
@@ -104,9 +104,9 @@ def test_lambda_handler_reuses_one_event_loop_and_serves_every_queue(
     loops: list[asyncio.AbstractEventLoop] = []
     built_kinds: list[list[JobKind]] = []
 
-    async def process_one() -> bool:
+    async def process_one() -> JobResult:
         loops.append(asyncio.get_running_loop())
-        return False
+        return JobResult.IDLE
 
     def build(_db: object, kinds: Any) -> list[JobHandler]:
         built_kinds.append(list(kinds))
@@ -130,10 +130,10 @@ def test_lambda_handler_reuses_one_event_loop_and_serves_every_queue(
 def test_lambda_handler_respects_remaining_time(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
 
-    async def process_one() -> bool:
+    async def process_one() -> JobResult:
         nonlocal calls
         calls += 1
-        return False
+        return JobResult.IDLE
 
     monkeypatch.setattr(lambda_jobs, "get_db", lambda: object())
     monkeypatch.setattr(
@@ -360,3 +360,25 @@ async def test_broken_job_dependencies_do_not_stop_the_api(monkeypatch: pytest.M
     monkeypatch.setattr(main, "build_job_handlers", broken)
 
     await asyncio.wait_for(main.run_in_process_jobs([JobKind.MEDIATION], asyncio.Event()), 1)
+
+
+def test_tests_never_see_real_credentials() -> None:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    for name in (
+        "aws_access_key",
+        "aws_secret_key",
+        "job_wakeup_aws_access_key",
+        "job_wakeup_aws_secret_key",
+        "access_key_danfeng",
+        "access_key_joris",
+        "aerodatabox_api_key",
+        "openai_api_key",
+    ):
+        assert not getattr(settings, name), f"{name} leaked into the test environment"
+    aws._session.cache_clear()
+    try:
+        assert aws.get_s3_session().get_credentials() is None
+    finally:
+        aws._session.cache_clear()

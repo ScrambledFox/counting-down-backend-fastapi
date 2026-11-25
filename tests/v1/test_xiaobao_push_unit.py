@@ -31,6 +31,7 @@ from app.services.xiaobao_push import (
     XiaoBaoPushDeliveryService,
 )
 from app.util.time import utc_now
+from app.workers.job_runner import JobResult
 from app.workers.xiaobao_push_worker import process_one_xiaobao_push_work_item
 
 OID_1 = "64b64c000000000000000001"
@@ -197,7 +198,9 @@ async def test_dispatch_failure_keeps_worker_loop_alive() -> None:
     delivery = SimpleNamespace(process=AsyncMock())
     deliveries = SimpleNamespace(fail_exhausted_stale=AsyncMock(), claim_next=AsyncMock())
 
-    assert not await process_one_xiaobao_push_work_item(dispatch, delivery, deliveries)
+    assert (
+        await process_one_xiaobao_push_work_item(dispatch, delivery, deliveries) == JobResult.FAILED
+    )
     deliveries.claim_next.assert_not_awaited()
 
 

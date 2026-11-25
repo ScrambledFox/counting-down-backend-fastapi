@@ -38,10 +38,12 @@ def _oid(value: MongoId | str | None) -> ObjectId | None:
 
 
 async def _insert_once_per_job(collection: Any, document: dict[str, Any]) -> dict[str, Any] | None:
-    """Insert an AI output, at most once per producing job.
+    """Insert an AI output, deduplicated per producing job on a best-effort basis.
 
     A retried or superseded job run that reaches persistence again receives the output already
-    stored for that job instead of creating a duplicate. Outputs without a job are plain inserts.
+    stored for that job instead of creating a duplicate. Without a unique index, two writers in
+    the same instant could still both insert; see ADR 0001. Outputs without a job are plain
+    inserts.
     """
     job_id = document.get("ai_job_id")
     if job_id is None:

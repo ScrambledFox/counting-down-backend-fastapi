@@ -28,6 +28,8 @@ LOG_FIELDS: Final = frozenset(
         "failed",
         "timed_out",
         "processed_total",
+        "terminal",
+        "terminal_total",
         "failed_total",
         "timed_out_total",
         "routine_id",

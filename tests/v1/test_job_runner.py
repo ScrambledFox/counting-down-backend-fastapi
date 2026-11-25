@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 import pytest
 
 from app.workers import job_runner
-from app.workers.job_runner import JobHandler, JobKind, run_jobs
+from app.workers.job_runner import JobHandler, JobKind, JobResult, run_jobs
 
 
 @pytest.fixture(autouse=True)
@@ -31,15 +31,15 @@ class FakeQueue:
         timeout: float = 1.0,
         idle: float = 0.05,
     ) -> JobHandler:
-        async def process_one() -> bool:
+        async def process_one() -> JobResult:
             self.calls += 1
             if not self.items:
-                return False
+                return JobResult.IDLE
             item = self.items.popleft()
             if work:
                 await work(item)
             self.done.append(item)
-            return True
+            return JobResult.PROCESSED
 
         return JobHandler(
             kind=kind, process_one=process_one, timeout_seconds=timeout, idle_interval_seconds=idle
@@ -161,7 +161,7 @@ async def test_routine_starts_while_mediation_and_image_work_is_underway() -> No
 
 @pytest.mark.asyncio
 async def test_failing_queue_does_not_stop_healthy_queues() -> None:
-    async def broken() -> bool:
+    async def broken() -> JobResult:
         raise RuntimeError("image storage unavailable")
 
     mediation = FakeQueue(["m1", "m2", "m3"])
@@ -209,7 +209,7 @@ async def test_items_that_cannot_finish_before_the_deadline_are_not_claimed() ->
 async def test_failing_queue_backs_off_instead_of_spinning() -> None:
     calls = 0
 
-    async def broken() -> bool:
+    async def broken() -> JobResult:
         nonlocal calls
         calls += 1
         raise RuntimeError("database unavailable")
@@ -286,7 +286,7 @@ async def test_queue_that_cannot_initialize_retries_without_blocking_others() ->
         builds += 1
         raise RuntimeError("OPENAI_API_KEY is not configured")
 
-    async def never_called(_services: object) -> bool:
+    async def never_called(_services: object) -> JobResult:
         raise AssertionError("unreachable")
 
     broken = _lazy_queue(
