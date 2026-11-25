@@ -46,6 +46,7 @@ class ImageMetadataRepository:
         cursor: ImageCursorPayload | None,
         user_filter: UserType | None = None,
         sensitive_only: bool = False,
+        exclude_sensitive: bool = False,
     ) -> list[ImageMetadata]:
         # Index required for keyset pagination (created_at stored as uploaded_at):
         # db.images.createIndex({ uploaded_at: -1, _id: -1 })
@@ -56,6 +57,10 @@ class ImageMetadataRepository:
 
         if sensitive_only:
             query["image_tags"] = {"$regex": r"^\s*(sensitive|spicy|nude)\s*$", "$options": "i"}
+        if exclude_sensitive:
+            query["$nor"] = [
+                {"image_tags": {"$regex": r"^\s*(sensitive|spicy|nude)\s*$", "$options": "i"}}
+            ]
 
         if cursor is not None:
             query = {
