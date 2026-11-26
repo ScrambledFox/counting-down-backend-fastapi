@@ -2,6 +2,10 @@
 aws_region        = "eu-west-1"
 initial_image_tag = "sha-REPLACE_WITH_FIRST_PUSHED_COMMIT"
 
+# Phase 3: the API function (see docs/phase3-runbook.md).
+api_initial_image_tag = "sha-REPLACE_WITH_FIRST_PUSHED_API_COMMIT"
+frontend_origins      = ["https://www.bibi-zhuzhu.nl", "https://bibi-zhuzhu.nl"]
+
 s3_bucket_name   = "REPLACE-with-existing-image-bucket"
 s3_bucket_region = "eu-west-1"
 mongo_app_name   = "production"

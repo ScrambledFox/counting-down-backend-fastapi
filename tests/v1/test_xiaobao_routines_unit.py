@@ -396,6 +396,8 @@ async def test_message_indexes_are_created_before_routine_indexes(monkeypatch) -
         "ensure_xiaobao_indexes",
         "ensure_xiaobao_routine_indexes",
         "ensure_xiaobao_push_indexes",
+        "ensure_usage_counter_indexes",
+        "ensure_image_upload_indexes",
     ):
         monkeypatch.setattr(indexes, name, record(name))
 
@@ -412,6 +414,7 @@ async def test_message_indexes_are_created_before_routine_indexes(monkeypatch) -
 
     assert calls.index("ensure_xiaobao_indexes") < calls.index("ensure_xiaobao_routine_indexes")
     assert "image_jobs" in calls
+    assert "ensure_usage_counter_indexes" in calls
 
 
 def test_nonexistent_local_time_moves_forward_to_first_valid_instant() -> None:

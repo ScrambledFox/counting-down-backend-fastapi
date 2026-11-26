@@ -1,12 +1,13 @@
 from typing import Annotated, Any
 
-from fastapi import Depends, Header, Response, Security
+from fastapi import Depends, Header, Request, Response, Security
 
 from app.api.routing import make_router
 from app.core.auth import require_session
 from app.core.config import get_settings
 from app.schemas.v1.session import LoginRequest, SessionResponse
 from app.services.auth import AuthService
+from app.services.usage_limits import client_address
 
 router = make_router()
 
@@ -18,10 +19,11 @@ SESSION_COOKIE_NAME = "session_id"
 @router.post("/login", summary="Login User and Create Session")
 async def login_user(
     body: LoginRequest,
+    request: Request,
     response: Response,
     auth_service: Annotated[AuthService, Depends()],
 ) -> SessionResponse:
-    session = await auth_service.login_user(body.access_key)
+    session = await auth_service.login_user(body.access_key, client_address(request))
     is_prod = settings.app_env.lower() == "prod"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,

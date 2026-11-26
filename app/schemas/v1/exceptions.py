@@ -39,6 +39,16 @@ class NotFoundException(HTTPException):
         super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
+class TooManyRequestsException(HTTPException):
+    """429 raised when a usage limit is reached. ``retry_after`` is in seconds."""
+
+    def __init__(self, detail: str, retry_after: int | None = None):
+        headers = {"Retry-After": str(retry_after)} if retry_after else None
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail, headers=headers
+        )
+
+
 class ServiceUnavailableException(HTTPException):
     """503 raised when an upstream service is unavailable."""
 

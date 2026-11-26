@@ -80,6 +80,7 @@ variable "extra_environment" {
     condition = length(setintersection(keys(var.extra_environment), [
       "MONGO_URL", "OPENAI_API_KEY", "XIAOBAO_WEB_PUSH_VAPID_PRIVATE_KEY",
       "XIAOBAO_WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY", "AWS_ACCESS_KEY", "AWS_SECRET_KEY",
+      "ACCESS_KEY_DANFENG", "ACCESS_KEY_JORIS", "AERODATABOX_API_KEY",
     ])) == 0
     error_message = "Secrets belong in SSM Parameter Store, not in extra_environment."
   }
@@ -116,6 +117,35 @@ variable "github_environment" {
 
 variable "create_github_oidc_provider" {
   description = "Create the GitHub OIDC provider. Set false if the account already has one."
+  type        = bool
+  default     = true
+}
+
+variable "api_initial_image_tag" {
+  description = "API image tag used only when the API function is first created. CI owns later updates."
+  type        = string
+}
+
+variable "api_memory_mb" {
+  description = "API function memory; more memory also means more CPU and faster cold starts."
+  type        = number
+  default     = 1024
+}
+
+variable "api_reserved_concurrency" {
+  description = "Maximum concurrent API instances. Two users need very few; this caps abuse and cost."
+  type        = number
+  default     = 5
+}
+
+variable "frontend_origins" {
+  description = "Browser origins allowed by API CORS and the image bucket's upload CORS rule."
+  type        = list(string)
+  default     = ["https://www.bibi-zhuzhu.nl", "https://bibi-zhuzhu.nl"]
+}
+
+variable "manage_bucket_cors" {
+  description = "Manage the image bucket's CORS rules (needed for direct browser uploads)."
   type        = bool
   default     = true
 }

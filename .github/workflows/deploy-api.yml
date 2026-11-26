@@ -1,0 +1,131 @@
+name: Deploy API Lambda
+
+# Deploys the HTTP API image (code only; OpenTofu owns configuration, see ADR 0001).
+# Disabled until the repository variable API_DEPLOY_ENABLED is "true". Authenticates with
+# GitHub OIDC: no AWS keys in GitHub.
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api-lambda
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: vars.API_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      MONGO_URL: mongodb://localhost:27017
+      MONGO_APP_NAME: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          uv sync --locked --group dev
+      - name: Run tests
+        run: uv run --no-sync pytest -p no:cacheprovider --disable-warnings
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    environment: jobs-production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      FUNCTION_NAME: ${{ vars.API_FUNCTION_NAME }}
+      ECR_REPOSITORY: ${{ vars.API_ECR_REPOSITORY }}
+      IMAGE_TAG: sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_JOBS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the API image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          image="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+               --image-ids imageTag="$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Image $IMAGE_TAG already exists (immutable tags); reusing it."
+          else
+            # Lambda requires a single-platform image manifest: no provenance or SBOM attestations.
+            docker buildx build --platform linux/arm64 --target api \
+              --provenance=false --sbom=false --tag "$image" --push .
+          fi
+          echo "IMAGE_URI=$image" >> "$GITHUB_ENV"
+
+      - name: Publish a new version
+        run: |
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" \
+            --image-uri "$IMAGE_URI" --output text --query LastUpdateStatus
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+          version=$(aws lambda publish-version --function-name "$FUNCTION_NAME" \
+            --description "$IMAGE_TAG" --query Version --output text)
+          previous=$(aws lambda get-alias --function-name "$FUNCTION_NAME" --name live \
+            --query FunctionVersion --output text)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PREVIOUS_VERSION=$previous" >> "$GITHUB_ENV"
+
+      - name: Smoke-test the new version
+        run: |
+          # A Function URL request for the readiness check (database ping), sent straight to
+          # the new version; the public URL keeps serving the previous version meanwhile.
+          # shellcheck disable=SC2016  # "$default" is a literal Function URL route key
+          payload='{"version":"2.0","routeKey":"$default","rawPath":"/health/ready","rawQueryString":"","headers":{"host":"smoke.invalid"},"requestContext":{"http":{"method":"GET","path":"/health/ready","protocol":"HTTP/1.1","sourceIp":"127.0.0.1","userAgent":"deploy-smoke"},"domainName":"smoke.invalid","stage":"$default","requestId":"deploy-smoke"},"isBase64Encoded":false}'
+          error=$(aws lambda invoke --function-name "$FUNCTION_NAME" --qualifier "$VERSION" \
+            --cli-binary-format raw-in-base64-out --payload "$payload" \
+            --query FunctionError --output text result.bin)
+          if [ "$error" != "None" ] || ! grep -aq '"statusCode":200' result.bin \
+               || ! grep -aq '"status":"ok"' result.bin; then
+            echo "::error::Readiness check failed on version $VERSION; the live alias was not moved."
+            tr -c '[:print:]\n' ' ' < result.bin | head -c 500
+            exit 1
+          fi
+          echo "readiness: ok"
+
+      - name: Move the live alias
+        run: |
+          aws lambda update-alias --function-name "$FUNCTION_NAME" --name live \
+            --function-version "$VERSION" --output text --query FunctionVersion
+          {
+            echo "### API Lambda deployed"
+            echo "- Image: \`$IMAGE_TAG\`"
+            echo "- Live version: $VERSION (previous: $PREVIOUS_VERSION)"
+            echo "- Roll back: \`aws lambda update-alias --function-name $FUNCTION_NAME --name live --function-version $PREVIOUS_VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"

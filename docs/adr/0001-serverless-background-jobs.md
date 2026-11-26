@@ -1,7 +1,8 @@
 # ADR 0001: Serverless hosting with finite, event-driven background jobs
 
-- **Status:** Accepted. Phase 1 merged and deployed (Heroku release v59). Phase 2 implemented,
-  not provisioned; awaiting approval. Phase 3 not started.
+- **Status:** Accepted. Phase 1 deployed (Heroku v59). Phase 2 provisioned and live since
+  2026-11-25 (jobs on Lambda; Heroku is web-only). Phase 3 (API on Lambda) implemented, not
+  provisioned; see `docs/phase3-runbook.md`.
 - **Dates:** 2026-11-24 (decision, Phase 1), 2026-11-25 (review fixes, final review fixes)
 - **Deciders:** Joris (owner), with Claude Code as implementer
 - **Scope:** `counting-down-fastapi` hosting and background execution; `counting-down` API URL
@@ -267,7 +268,7 @@ The operational procedure, configuration values, validation and rollback are in
 | # | Requirement | Status |
 |---|---|---|
 | 1 | Verify Atlas network access; never broaden it without approval | **Verified by the owner:** the list already contains `0.0.0.0/0` and is unchanged; documented as a security trade-off above. |
-| 2 | Rate limiting and AI safeguards before exposing the API through Lambda | **Phase 3 gate.** Xiao Bao chat has a per-user limit. Login brute-force protection, a mediation AI cap and a global AI spend guard are still to come. |
+| 2 | Rate limiting and AI safeguards before exposing the API through Lambda | **Implemented (Phase 3):** failed-login limits per client address (10 per 15 min) and overall (100 per hour); a global daily AI request budget (500) enforced in `OpenAIClient`; 30 mediation AI runs per person per day; the existing Xiao Bao chat limit; API reserved concurrency 5. |
 | 3 | Long jobs must not delay push or routines | **Done:** separate lanes, per-item timeouts. |
 | 4 | Bounded async retries and event expiry | **Implemented (not provisioned):** `maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300` on the jobs function; the schedule target uses 0 retries and a 120 s event age. |
 | 5 | Monitor async event age, dropped events and overdue jobs | **Superseded by owner decision (2026-11-25):** no CloudWatch alarms; budget alerts only. The summary log fields remain. Originally designed as: alarms on `AsyncEventAge`, `AsyncEventsDropped`, `Errors` and `Throttles`; the `job_run_summary` metric filter; oldest-due push and routine age metrics. |
@@ -275,7 +276,7 @@ The operational procedure, configuration values, validation and rollback are in
 | 7 | No exactly-once push claim | **Done:** at-least-once, with best-effort dedupe (unique delivery per message and device, token fencing, service-worker `tag` with `renotify: false`). |
 | 8 | Protect ECR images used by active and rollback versions | **Implemented (not provisioned):** SHA tags; keep 5 Lambda versions; lifecycle policy expires only untagged images and SHA tags beyond the newest 10. |
 | 9 | One image vs two build targets | **Resolved:** one Dockerfile, shared dependency and source layers, two thin targets. |
-| 10 | Verify auth, cookies, CORS, SSE, disconnects and S3 before the API move | **Phase 3 gate:** checklist below. |
+| 10 | Verify auth, cookies, CORS, SSE, disconnects and S3 before the API move | **Implemented (Phase 3):** see the checklist results below; streaming, cold start and uploads are verified on the provisioned function during cutover. |
 | 11 | Free allowances are shared with other projects | **Accepted:** a dedicated AWS account for BIBI is recommended; budgets apply in any case. |
 | 12 | Infrastructure and CI must not compete over versions and aliases | **Implemented:** Tofu ignores `image_uri` and the alias version; CI owns code updates, publishing and alias moves. |
 
@@ -366,6 +367,20 @@ Preconditions: amendments 2 and 10 complete.
   - presigned S3 upload and download with the explicit bucket region;
   - push subscription flow;
   - cold-start latency.
+- **Checklist results (2026-11-26):**
+  - Authentication uses the `X-Session-Id` header from frontend storage, so the API's origin
+    can change without breaking sessions (stored in MongoDB, shared by Heroku and Lambda).
+  - CORS stays application-managed (`FRONTEND_URLS`); verified in the container.
+  - Uploads: Lambda accepts at most 6 MB per request (about 4.5 MB of binary data after
+    base64), and 10% of stored photos exceed 3.7 MB. **Decision:** browsers upload originals
+    straight to S3 with a presigned POST bound to one key, content type and size
+    (`/images/uploads`, then `/images/from-upload` or `/advent/from-upload`); the old
+    multipart endpoints remain during the transition.
+  - Image bytes served through the API stay under 6.5 MB and use the streaming response mode.
+  - Disconnects: a cancelled Xiao Bao stream is already marked `CANCELLED`; on Lambda the
+    generation may instead run to completion, which is also persisted correctly.
+  - Cold start: the image answers its first request about 2.4 s after start locally; LangGraph
+    (about 0.9 s) now loads on the first chat message instead of at startup.
 - **Cutover:** API function with a streaming Function URL and reserved concurrency; set
   `VITE_API_BASE_URL` in Vercel (frontend PR #12). Heroku stays at zero dynos for a soak period,
   then is decommissioned only with explicit approval, and its static AWS keys are rotated and

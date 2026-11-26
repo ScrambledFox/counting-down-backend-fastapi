@@ -192,6 +192,22 @@ class ImageService:
         created_ref = await self._metadata.create_image_metadata(new_metadata)
         return created_ref
 
+    async def create_image_from_upload(
+        self, metadata: ImageMetadataCreate, image_key: str, content_type: str | None
+    ) -> ImageMetadata:
+        """Record a gallery image whose original was uploaded directly to S3."""
+        return await self._metadata.create_image_metadata(
+            ImageMetadata(
+                image_key=image_key,
+                title=metadata.title,
+                description=metadata.description,
+                image_tags=metadata.image_tags,
+                uploaded_by=metadata.uploaded_by,
+                media_type=content_type,
+                uploaded_at=utc_now(),
+            )
+        )
+
     async def update_image_metadata(
         self, image_id: str, metadata_update: ImageMetadataUpdate
     ) -> ImageMetadata | None:

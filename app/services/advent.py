@@ -62,6 +62,27 @@ class AdventService:
         created_ref = await self._advent_repo.create_advent(new_advent)
         return created_ref
 
+    async def create_advent_from_upload(
+        self, advent_create: AdventCreate, image_key: str, content_type: str | None
+    ) -> Advent:
+        """Create an advent item whose image was uploaded directly to S3."""
+        image_data = await self._image_repo.get_image(image_key)
+        if not image_data:
+            raise BadRequestException("Uploaded image is empty")
+
+        thumbnail_data, img_format = create_thumbnail(image_data, settings.thumbnail_size)
+        await self._image_repo.upload_thumbnail_image(
+            image_key, thumbnail_data, f"image/{img_format.lower()}"
+        )
+        return await self._advent_repo.create_advent(
+            Advent(
+                **advent_create.model_dump(),
+                uploaded_at=utc_now(),
+                content_type=content_type,
+                image_key=image_key,
+            )
+        )
+
     async def delete_advent_by_id(self, advent_id: str) -> None:
         advent_ref = await self._advent_repo.get_advent_by_id(advent_id)
         if advent_ref is None:

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     xiaobao_routine_runs_collection_name: str = "xiaobao_routine_runs"
     xiaobao_push_subscriptions_collection_name: str = "xiaobao_push_subscriptions"
     xiaobao_push_deliveries_collection_name: str = "xiaobao_push_deliveries"
+    usage_counters_collection_name: str = "usage_counters"
+    image_uploads_collection_name: str = "image_uploads"
 
     aws_s3_image_folder: str = "images/"
     aws_s3_thumbnail_folder: str = "thumbnails/"
@@ -92,6 +94,20 @@ class Settings(BaseSettings):
     xiaobao_mediation_private_context_character_limit: int = 15_000
     xiaobao_rate_limit_requests: int = 10
     xiaobao_rate_limit_window_seconds: int = 300
+
+    # Abuse and cost guards (ADR 0001, Phase 3). The API is reachable on a public URL without
+    # API Gateway throttling, so these limits live in the application. 0 disables a limit.
+    login_max_failures_per_client: int = 10
+    login_failure_window_seconds: int = 15 * 60
+    login_max_failures_global: int = 100
+    login_global_failure_window_seconds: int = 60 * 60
+    ai_daily_request_limit: int = 500
+    mediation_ai_daily_runs_per_user: int = 30
+
+    # Direct-to-S3 image uploads: the browser sends the file to S3 with a presigned POST, so
+    # uploads are not limited by the API's request size.
+    image_upload_max_bytes: int = 25 * 1024 * 1024
+    image_upload_url_expires_seconds: int = 10 * 60
     xiaobao_checkpoint_ttl_seconds: int = 7 * 24 * 60 * 60
     xiaobao_routine_clock_poll_interval_seconds: float = 15.0
     xiaobao_routine_worker_poll_interval_seconds: float = 2.0

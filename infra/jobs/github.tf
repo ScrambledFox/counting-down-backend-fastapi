@@ -68,7 +68,7 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecr:PutImage",
       "ecr:UploadLayerPart",
     ]
-    resources = [aws_ecr_repository.jobs.arn]
+    resources = [aws_ecr_repository.jobs.arn, aws_ecr_repository.api.arn]
   }
 
   statement {
@@ -80,21 +80,26 @@ data "aws_iam_policy_document" "github_deploy" {
       "lambda:PublishVersion",
       "lambda:UpdateFunctionCode",
     ]
-    resources = [aws_lambda_function.jobs.arn]
+    resources = [aws_lambda_function.jobs.arn, aws_lambda_function.api.arn]
   }
 
   statement {
     sid       = "SmokeTestPublishedVersions"
     actions   = ["lambda:InvokeFunction"]
-    resources = ["${aws_lambda_function.jobs.arn}:*"]
+    resources = ["${aws_lambda_function.jobs.arn}:*", "${aws_lambda_function.api.arn}:*"]
   }
 
   # Lambda authorizes alias reads and updates against the function ARN, not the alias ARN.
-  # The function has a single alias (live), so this still covers only that alias.
+  # Each function has a single alias (live), so this still covers only those aliases.
   statement {
-    sid       = "MoveLiveAlias"
-    actions   = ["lambda:GetAlias", "lambda:UpdateAlias"]
-    resources = [aws_lambda_function.jobs.arn, aws_lambda_alias.live.arn]
+    sid     = "MoveLiveAlias"
+    actions = ["lambda:GetAlias", "lambda:UpdateAlias"]
+    resources = [
+      aws_lambda_function.jobs.arn,
+      aws_lambda_alias.live.arn,
+      aws_lambda_function.api.arn,
+      aws_lambda_alias.api_live.arn,
+    ]
   }
 }
 

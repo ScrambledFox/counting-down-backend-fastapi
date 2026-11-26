@@ -9,16 +9,21 @@ from app.core.config import get_settings
 from app.schemas.v1.base import MongoId
 from app.schemas.v1.exceptions import NotFoundException
 from app.schemas.v1.image import (
+    ImageFromUploadCreate,
     ImageMetadataCreate,
     ImageMetadataResponse,
     ImageMetadataUpdate,
     ImagePageResponse,
     ImagePresignedUrlResponse,
     ImageThumbnailSizes,
+    ImageUploadPurpose,
+    ImageUploadRequest,
+    ImageUploadTicket,
 )
 from app.schemas.v1.session import SessionResponse
 from app.schemas.v1.user import UserType
 from app.services.image import ImageService
+from app.services.image_upload import ImageUploadService
 from app.services.job_wakeup import JobWakeup, get_job_wakeup
 from app.workers.job_runner import JobKind
 
@@ -27,6 +32,7 @@ router = make_router(prefix="/images")
 settings = get_settings()
 
 ImageServiceDependency = Annotated[ImageService, Depends()]
+ImageUploadServiceDependency = Annotated[ImageUploadService, Depends()]
 JobWakeupDependency = Annotated[JobWakeup, Depends(get_job_wakeup)]
 
 
@@ -189,6 +195,44 @@ async def create_image_metadata(
         item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
     )
 
+    return ImageMetadataResponse(
+        **item.model_dump(), url=url, thumbnail_url=thumbnail_url, thumbnail_xl_url=thumbnail_xl_url
+    )
+
+
+@router.post("/uploads", summary="Start a Direct Image Upload")
+async def create_image_upload(
+    body: ImageUploadRequest,
+    uploads: ImageUploadServiceDependency,
+    session: SessionResponse = Depends(require_session),
+) -> ImageUploadTicket:
+    """Return a short-lived S3 form so the browser uploads the original file directly."""
+    return await uploads.create_ticket(session.user_type, body)
+
+
+@router.post("/from-upload", summary="Create Image from a Direct Upload")
+async def create_image_from_upload(
+    body: ImageFromUploadCreate,
+    img_service: ImageServiceDependency,
+    uploads: ImageUploadServiceDependency,
+    job_wakeup: JobWakeupDependency,
+    session: SessionResponse = Depends(require_session),
+) -> ImageMetadataResponse:
+    stored = await uploads.claim(session.user_type, ImageUploadPurpose.GALLERY, body.upload_key)
+    item = await img_service.create_image_from_upload(
+        ImageMetadataCreate(**body.model_dump(exclude={"upload_key"})),
+        body.upload_key,
+        stored.content_type,
+    )
+    await job_wakeup.wake(JobKind.IMAGE)
+
+    url = await img_service.get_image_presigned_url(item.image_key)
+    thumbnail_url = await img_service.get_thumbnail_presigned_url(
+        item.image_key, ready_sizes=item.thumbnail_sizes_ready
+    )
+    thumbnail_xl_url = await img_service.get_thumbnail_presigned_url(
+        item.image_key, settings.thumbnail_xl_size, ready_sizes=item.thumbnail_sizes_ready
+    )
     return ImageMetadataResponse(
         **item.model_dump(), url=url, thumbnail_url=thumbnail_url, thumbnail_xl_url=thumbnail_xl_url
     )
