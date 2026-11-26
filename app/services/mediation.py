@@ -40,6 +40,7 @@ from app.schemas.v1.mediation import (
 from app.schemas.v1.user import UserType
 from app.services.job_wakeup import JobWakeup, get_job_wakeup
 from app.services.mediation_safety import MediationSafetyService, ModerationDecision
+from app.services.usage_limits import AIUsageGuard
 from app.util.time import utc_now
 from app.util.user import get_other_user_type
 from app.workers.job_runner import JobKind
@@ -58,6 +59,7 @@ class MediationService:
         job_repo: Annotated[MediationJobRepository, Depends()],
         safety_service: Annotated[MediationSafetyService, Depends()],
         job_wakeup: Annotated[JobWakeup, Depends(get_job_wakeup)],
+        ai_usage: Annotated[AIUsageGuard | None, Depends(AIUsageGuard)] = None,
     ) -> None:
         self._sessions = session_repo
         self._perspectives = perspective_repo
@@ -67,6 +69,7 @@ class MediationService:
         self._jobs = job_repo
         self._safety = safety_service
         self._job_wakeup = job_wakeup
+        self._ai_usage = ai_usage or AIUsageGuard()
 
     async def _get_session_or_404(self, session_id: MongoId) -> MediationSession:
         session = await self._sessions.get_by_id(session_id)
@@ -378,6 +381,7 @@ class MediationService:
         perspective_text = perspective.combined_text()
         if len(perspective_text) < 50:
             raise ConflictException("Perspective must contain at least 50 characters")
+        await self._ai_usage.consume_mediation_run(current_user_type)
 
         pending = await self._perspectives.mark_pending_review(str(perspective.id))
         if not pending:
@@ -495,6 +499,7 @@ class MediationService:
     ) -> CommentCreateResponse:
         session = await self._get_session_or_404(session_id)
         await self._assert_comments_available(session)
+        await self._ai_usage.consume_mediation_run(current_user_type)
         decision = await self._safety.moderate_comment(payload.content)
         moderation = await self._persist_moderation(
             decision=decision,

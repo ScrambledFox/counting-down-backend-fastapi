@@ -37,3 +37,19 @@ class Advent(AdventBase):
 
 class AdventCreate(AdventBase):
     pass
+
+
+class AdventFromUploadCreate(CustomModel):
+    """Create an advent item for a finished direct upload; the uploader is the session user."""
+
+    upload_key: str = Field(..., min_length=1, max_length=100)
+    day: int
+    title: str = Field(default="New Advent", max_length=100)
+    description: str = Field(default="", max_length=500)
+    type: AdventType
+
+    @field_validator("day")
+    def validate_day(cls, v: int) -> int:
+        if not (1 <= v <= 31):
+            raise ValueError("Day must be between 1 and 31")
+        return v

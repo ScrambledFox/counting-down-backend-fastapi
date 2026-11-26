@@ -1,8 +1,10 @@
+from typing import Any
+
 from fastapi import Depends
 
 from app.core.config import get_settings
 from app.db.s3_client import get_s3_storage
-from app.models.s3 import S3Storage
+from app.models.s3 import S3ObjectInfo, S3Storage
 
 settings = get_settings()
 
@@ -47,6 +49,22 @@ class ImageRepository:
     async def get_thumbnail_exists(self, name: str) -> bool:
         key = self._thumbnail_key(name)
         return await self._s3_storage.get_object_exists(bucket=self._bucket, key=key)
+
+    async def get_image_info(self, name: str) -> S3ObjectInfo | None:
+        return await self._s3_storage.get_object_info(
+            bucket=self._bucket, key=self._image_key(name)
+        )
+
+    async def create_image_upload_form(
+        self, name: str, content_type: str, max_bytes: int, expires_in: int
+    ) -> dict[str, Any]:
+        return await self._s3_storage.generate_presigned_post(
+            bucket=self._bucket,
+            key=self._image_key(name),
+            content_type=content_type,
+            max_bytes=max_bytes,
+            expires_in=expires_in,
+        )
 
     async def upload_image(self, name: str, data: bytes, content_type: str | None = None) -> None:
         key = self._image_key(name)

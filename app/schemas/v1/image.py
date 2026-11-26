@@ -77,3 +77,41 @@ class ImagePresignedUrlResponse(BaseModel):
     thumbnail_url: str | None = None
     thumbnail_xl_url: str | None = None
     expires_in: int
+
+
+class ImageUploadPurpose(str, Enum):
+    GALLERY = "gallery"
+    ADVENT = "advent"
+
+
+class ImageUploadRequest(BaseModel):
+    """Ask for a direct-to-S3 upload form."""
+
+    purpose: ImageUploadPurpose = ImageUploadPurpose.GALLERY
+    content_type: str = Field(..., pattern=r"^image/[a-z0-9.+-]{1,50}$")
+    size_bytes: int = Field(..., gt=0)
+
+
+class UploadFormField(BaseModel):
+    name: str
+    value: str
+
+
+class ImageUploadTicket(BaseModel):
+    """A one-time S3 form upload: POST ``fields`` in order, then the file, to ``url``.
+
+    Fields are name/value pairs rather than an object so that client-side key conversion (the
+    frontend camel-cases response keys) can never rename S3's signed form fields.
+    """
+
+    upload_key: str
+    url: str
+    fields: list[UploadFormField]
+    expires_at: datetime
+    max_bytes: int
+
+
+class ImageFromUploadCreate(ImageMetadataBase):
+    """Create gallery image metadata for a finished direct upload."""
+
+    upload_key: str = Field(..., min_length=1, max_length=100)

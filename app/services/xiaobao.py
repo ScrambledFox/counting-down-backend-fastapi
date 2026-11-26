@@ -3,7 +3,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, HTTPException, status
 from pymongo.errors import DuplicateKeyError
@@ -30,15 +30,24 @@ from app.schemas.v1.xiaobao import (
     XiaoBaoMessageStatus,
 )
 from app.services.todo import TodoService
+from app.services.usage_limits import AIUsageGuard
 from app.services.xiaobao_context import RelationshipContextService
 from app.util.time import utc_now
-from app.xiaobao.graph import (
-    XiaoBaoRuntimeContext,
-    get_xiaobao_checkpointer,
-    run_xiaobao_graph,
-)
+
+if TYPE_CHECKING:
+    from app.xiaobao.graph import XiaoBaoGraphResult, XiaoBaoRuntimeContext
 
 settings = get_settings()
+
+
+# LangGraph takes about a second to import. The API imports this module at startup, so the graph
+# is loaded on first use instead, which keeps Lambda cold starts short. Tests patch this wrapper.
+async def run_xiaobao_graph(runtime: XiaoBaoRuntimeContext, content: str) -> XiaoBaoGraphResult:
+    from app.xiaobao.graph import run_xiaobao_graph as run_graph
+
+    return await run_graph(runtime, content)
+
+
 logger = get_logger(__name__)
 
 
@@ -56,6 +65,7 @@ class XiaoBaoConversationService:
         relationship_context: Annotated[RelationshipContextService, Depends()],
         todos: Annotated[TodoService, Depends()],
         openai_client: Annotated[OpenAIClient, Depends()],
+        ai_usage: Annotated[AIUsageGuard | None, Depends(AIUsageGuard)] = None,
     ) -> None:
         self._conversations = conversations
         self._messages = messages
@@ -64,6 +74,7 @@ class XiaoBaoConversationService:
         self._relationship_context = relationship_context
         self._todos = todos
         self._openai = openai_client
+        self._ai_usage = ai_usage or AIUsageGuard()
 
     async def create_conversation(self, owner: UserType) -> XiaoBaoConversation:
         now = utc_now()
@@ -100,6 +111,8 @@ class XiaoBaoConversationService:
         if not deleted:
             raise NotFoundException("Xiao Bao conversation", conversation_id)
         try:
+            from app.xiaobao.graph import get_xiaobao_checkpointer
+
             await get_xiaobao_checkpointer().adelete_thread(str(conversation_id))
         except Exception:
             logger.warning(
@@ -132,6 +145,7 @@ class XiaoBaoConversationService:
     ) -> tuple[XiaoBaoMessage, XiaoBaoMessage, bool]:
         conversation = await self._require_conversation(conversation_id, owner)
         await self._consume_rate_limit(owner)
+        await self._ai_usage.ensure_ai_available()
         now = utc_now()
         user_message, created = await self._messages.create_user(
             XiaoBaoMessage(
@@ -271,6 +285,8 @@ class XiaoBaoConversationService:
                 None,
             )
             history = await self._history(conversation_id, str(user_message.id))
+            from app.xiaobao.graph import XiaoBaoRuntimeContext
+
             runtime = XiaoBaoRuntimeContext(
                 owner=owner,
                 conversation_id=str(conversation_id),

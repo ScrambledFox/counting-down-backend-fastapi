@@ -2,11 +2,15 @@ import json
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import get_settings
 
 settings = get_settings()
+
+
+if TYPE_CHECKING:
+    from app.services.usage_limits import AIUsageGuard
 
 
 @dataclass(frozen=True)
@@ -155,8 +159,23 @@ def _prepare_responses_input_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 class OpenAIClient:
+    # No constructor parameters: FastAPI builds this class as a dependency and would treat any
+    # parameter as a request field. Tests replace the guard with ``use_usage_guard``.
     def __init__(self) -> None:
         self._client: Any | None = None
+        self._usage_guard: AIUsageGuard | None = None
+
+    def use_usage_guard(self, guard: AIUsageGuard) -> None:
+        self._usage_guard = guard
+
+    async def _consume_ai_budget(self) -> None:
+        # Imported lazily: the guard needs the database layer, which this module must not load
+        # at import time (the jobs entry point loads secrets before any settings are read).
+        if self._usage_guard is None:
+            from app.services.usage_limits import AIUsageGuard
+
+            self._usage_guard = AIUsageGuard()
+        await self._usage_guard.consume_ai_request()
 
     def _get_client(self) -> Any:
         if not settings.openai_api_key:
@@ -180,6 +199,7 @@ class OpenAIClient:
         safety_identifier: str | None = None,
     ) -> OpenAIStructuredResult:
         client = self._get_client()
+        await self._consume_ai_budget()
         strict_schema = _to_openai_strict_json_schema(json_schema)
         response = await client.responses.create(
             model=model,
@@ -236,6 +256,7 @@ class OpenAIClient:
         stream_content_field: str | None = None,
     ) -> OpenAIStreamedResult:
         client = self._get_client()
+        await self._consume_ai_budget()
         request: dict[str, Any] = {
             "model": model,
             "input": [_prepare_responses_input_item(item) for item in input_items],

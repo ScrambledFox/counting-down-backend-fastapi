@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import closing
 from functools import lru_cache
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from boto3.s3.transfer import TransferConfig
 from botocore.config import Config
@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.core.aws import get_s3_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.s3 import S3Storage
+from app.models.s3 import S3ObjectInfo, S3Storage
 
 if TYPE_CHECKING:
     from types_boto3_s3 import S3Client
@@ -129,6 +129,48 @@ class Boto3S3Storage(S3Storage):
                 extra={"bucket": bucket, "key": key},
             )
             raise
+
+    async def get_object_info(self, *, bucket: str, key: str) -> S3ObjectInfo | None:
+        def _head() -> S3ObjectInfo:
+            response = self._client.head_object(Bucket=bucket, Key=key)
+            return S3ObjectInfo(
+                size=int(response["ContentLength"]), content_type=response.get("ContentType")
+            )
+
+        try:
+            return await run_in_threadpool(_head)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"404", "NoSuchKey", "NotFound"}:
+                return None
+            self._logger.error(
+                "S3 head_object failed",
+                extra={"bucket": bucket, "error_type": type(exc).__name__},
+            )
+            raise
+
+    async def generate_presigned_post(
+        self, *, bucket: str, key: str, content_type: str, max_bytes: int, expires_in: int
+    ) -> dict[str, Any]:
+        """A browser form upload for exactly this key, content type and size range.
+
+        S3 enforces the conditions, so the browser cannot choose another key, store a different
+        content type or exceed the size limit. The URL and fields are credentials for one upload
+        and are never logged.
+        """
+
+        def _post() -> dict[str, Any]:
+            return self._client.generate_presigned_post(
+                Bucket=bucket,
+                Key=key,
+                Fields={"Content-Type": content_type},
+                Conditions=[
+                    {"Content-Type": content_type},
+                    ["content-length-range", 1, max_bytes],
+                ],
+                ExpiresIn=expires_in,
+            )
+
+        return await run_in_threadpool(_post)
 
     async def delete_object(self, *, bucket: str, key: str) -> None:
         self._logger.debug(

@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as v1_api_router
@@ -82,4 +82,18 @@ app.include_router(v1_api_router)
 def health() -> HealthResponse:
     logger = get_logger("health")
     logger.debug("Health check endpoint called")
+    return HealthResponse(status="ok")
+
+
+@app.get("/health/ready", tags=["meta"], response_model=HealthResponse)
+async def readiness(response: Response) -> HealthResponse:
+    """Deep check used by deployments: the database answers. Reveals nothing else."""
+    try:
+        await get_db().command("ping")
+    except Exception as exc:
+        get_logger("health").error(
+            "Readiness check failed", extra={"error_type": type(exc).__name__}
+        )
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return HealthResponse(status="unavailable")
     return HealthResponse(status="ok")

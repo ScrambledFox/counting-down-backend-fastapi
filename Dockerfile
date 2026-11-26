@@ -45,7 +45,7 @@ ENV PORT=8080 \
     AWS_LWA_INVOKE_MODE=response_stream \
     AWS_LWA_READINESS_CHECK_PATH=/health
 EXPOSE 8080
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.lambda_api:app", "--host", "0.0.0.0", "--port", "8080"]
 
 FROM base AS jobs
 ENTRYPOINT ["python", "-m", "awslambdaric"]

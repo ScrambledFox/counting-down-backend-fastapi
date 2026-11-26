@@ -7,9 +7,11 @@ unless ``ENSURE_INDEXES_ON_STARTUP`` is false, during web startup.
 from app.models.mongo import AsyncDB
 from app.repositories.airport import ensure_airport_indexes
 from app.repositories.image_jobs import ImageJobRepository
+from app.repositories.image_upload import ensure_image_upload_indexes
 from app.repositories.mediation import ensure_mediation_indexes
 from app.repositories.relationship_care import ensure_relationship_care_indexes
 from app.repositories.relationship_profile import ensure_relationship_profile_indexes
+from app.repositories.usage_counters import ensure_usage_counter_indexes
 from app.repositories.xiaobao import ensure_xiaobao_indexes
 from app.repositories.xiaobao_push import ensure_xiaobao_push_indexes
 from app.repositories.xiaobao_routine import ensure_xiaobao_routine_indexes
@@ -25,3 +27,5 @@ async def ensure_all_indexes(db: AsyncDB) -> None:
     await ensure_xiaobao_routine_indexes(db)
     await ensure_xiaobao_push_indexes(db)
     await ImageJobRepository(db).ensure_indexes()
+    await ensure_usage_counter_indexes(db)
+    await ensure_image_upload_indexes(db)
